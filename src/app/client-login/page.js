@@ -2,40 +2,106 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { supabase } from '../../lib/supabaseClient';
 
 export default function ClientLogin() {
+  // 'password' (for you) | 'otp_request' (for clients) | 'otp_verify'
+  const [loginMode, setLoginMode] = useState('password'); 
+  
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [otpToken, setOtpToken] = useState('');
+  
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const router = useRouter();
 
-  const handleLogin = async (e) => {
+  // FLOW 1: MANAGER BYPASS (Instant Password Login)
+  const handlePasswordLogin = async (e) => {
     e.preventDefault();
-    setIsLoading(true);
-    setError('');
+    setIsLoading(true); setError('');
 
     if (!username || !password) {
-      setError('Please enter both your username and password.');
-      setIsLoading(false);
-      return;
+      setError('Please enter both your email and password.');
+      setIsLoading(false); return;
     }
 
-    // Simulate secure network verification
-    await new Promise(resolve => setTimeout(resolve, 1400));
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: username,
+      password: password,
+    });
 
-    // Save auth state and route to dashboard
-    sessionStorage.setItem('client_authenticated', 'true');
-    sessionStorage.setItem('current_user', username);
-    window.location.href = '/client';
+    if (error) {
+      setError('Invalid credentials. Please verify your email and password.');
+      setIsLoading(false); return;
+    }
+
+    if (data.session) {
+      sessionStorage.setItem('client_authenticated', 'true');
+      sessionStorage.setItem('current_user', data.user.email);
+      window.location.href = '/client';
+    }
+  };
+
+  // FLOW 2: CLIENT OTP REQUEST (Send 6-Digit Code)
+  const handleOtpRequest = async (e) => {
+    e.preventDefault();
+    setIsLoading(true); setError('');
+
+    if (!username) {
+      setError('Please enter your registered email address.');
+      setIsLoading(false); return;
+    }
+
+    const { error } = await supabase.auth.signInWithOtp({
+      email: username,
+      options: {
+        // STRICT SECURITY: This prevents unregistered users from getting a code!
+        shouldCreateUser: false 
+      }
+    });
+
+    if (error) {
+      setError('Unrecognized email. You must be a registered client to receive a code.');
+    } else {
+      setLoginMode('otp_verify'); // Move to the code entry screen
+    }
+    setIsLoading(false);
+  };
+
+  // FLOW 3: CLIENT OTP VERIFY (Submit the 6-Digit Code)
+  const handleOtpVerify = async (e) => {
+    e.preventDefault();
+    setIsLoading(true); setError('');
+
+    if (!otpToken || otpToken.length !== 6) {
+      setError('Please enter the full 6-digit code sent to your email.');
+      setIsLoading(false); return;
+    }
+
+    const { data, error } = await supabase.auth.verifyOtp({
+      email: username,
+      token: otpToken,
+      type: 'email'
+    });
+
+    if (error) {
+      setError('Invalid or expired code. Please try again.');
+      setIsLoading(false); return;
+    }
+
+    if (data.session) {
+      sessionStorage.setItem('client_authenticated', 'true');
+      sessionStorage.setItem('current_user', data.user.email);
+      window.location.href = '/client';
+    }
   };
 
   const styles = `
     * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
     body { background-color: white; margin: 0; padding: 0; color: #1f2937; -webkit-font-smoothing: antialiased; }
     
-    /* Top Utility Navigation */
     .login-top-nav { background-color: #0c2074; color: white; display: flex; justify-content: space-between; align-items: center; padding: 12px 40px; }
     .brand-logo { font-size: 24px; font-weight: 800; letter-spacing: -1px; display: flex; align-items: center; gap: 4px; }
     .brand-logo span { color: white; }
@@ -44,18 +110,14 @@ export default function ClientLogin() {
     .nav-links a { color: white; text-decoration: none; cursor: pointer; transition: opacity 0.2s; }
     .nav-links a:hover { opacity: 0.8; text-decoration: underline; }
 
-    /* Main Container */
     .login-container { max-width: 1000px; margin: 40px auto; padding: 0 20px; }
 
-    /* FDIC Banner */
     .fdic-banner { border: 1px solid #e5e7eb; border-radius: 6px; padding: 16px 20px; display: flex; align-items: center; gap: 12px; margin-bottom: 40px; font-size: 14px; color: #1f2937; }
     .fdic-bold { font-weight: 800; font-size: 16px; color: #0c2074; letter-spacing: -0.5px; }
     .fdic-italic { font-style: italic; color: #4b5563; }
 
-    /* Grid Layout */
     .login-grid { display: grid; grid-template-columns: 5fr 4fr; gap: 80px; align-items: start; }
 
-    /* Left Column: Form */
     h1 { font-size: 24px; font-weight: 700; color: #1f2937; margin: 0 0 32px 0; }
     
     .input-group { margin-bottom: 32px; position: relative; }
@@ -71,6 +133,7 @@ export default function ClientLogin() {
     .checkbox-row label { font-size: 16px; color: #4b5563; cursor: pointer; }
 
     .error-msg { background: #fee2e2; color: #991b1b; padding: 12px 16px; border-radius: 4px; margin-bottom: 24px; font-size: 14px; font-weight: 500; border-left: 4px solid #ef4444; }
+    .success-msg { background: #dcfce7; color: #166534; padding: 12px 16px; border-radius: 4px; margin-bottom: 24px; font-size: 14px; font-weight: 500; border-left: 4px solid #22c55e; }
 
     .btn-solid { width: 100%; background-color: #2563eb; color: white; border: none; padding: 14px; border-radius: 6px; font-size: 16px; font-weight: 600; cursor: pointer; transition: background-color 0.2s; display: flex; justify-content: center; align-items: center; gap: 8px; }
     .btn-solid:hover { background-color: #1d4ed8; }
@@ -87,18 +150,15 @@ export default function ClientLogin() {
     .forgot-link { display: inline-block; margin-top: 32px; color: #2563eb; font-size: 16px; font-weight: 600; text-decoration: none; display: flex; align-items: center; gap: 4px; }
     .forgot-link:hover { text-decoration: underline; }
 
-    /* Right Column: Passkey Promo */
     .passkey-card { background-color: #f8fafc; border-radius: 12px; padding: 40px; }
     .passkey-title { font-size: 22px; font-weight: 700; color: #1f2937; margin: 24px 0 16px 0; letter-spacing: -0.5px; }
     .passkey-desc { font-size: 16px; color: #4b5563; line-height: 1.6; margin-bottom: 24px; }
     .learn-more { color: #2563eb; font-weight: 600; font-size: 16px; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; text-decoration: none; }
     .learn-more:hover { text-decoration: underline; }
 
-    /* Loading Spinner */
     .spinner { width: 20px; height: 20px; border: 3px solid rgba(255,255,255,0.3); border-top: 3px solid white; border-radius: 50%; animation: spin 1s linear infinite; }
     @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
-    /* Responsive */
     @media (max-width: 900px) {
       .login-grid { grid-template-columns: 1fr; gap: 48px; }
       .login-top-nav { padding: 16px 20px; flex-direction: column; gap: 16px; align-items: flex-start; }
@@ -110,11 +170,8 @@ export default function ClientLogin() {
     <>
       <style dangerouslySetInnerHTML={{ __html: styles }} />
       
-      {/* Top Header */}
       <header className="login-top-nav">
-        <div className="brand-logo">
-          Global <span className="accent">Vault</span>
-        </div>
+        <div className="brand-logo">Global <span className="accent">Vault</span></div>
         <div className="nav-links">
           <a>Global Vault en Español</a>
           <a>Customer Service</a>
@@ -123,7 +180,6 @@ export default function ClientLogin() {
       </header>
 
       <main className="login-container">
-        {/* FDIC Banner */}
         <div className="fdic-banner">
           <span className="fdic-bold">FDIC</span>
           <span className="fdic-italic">FDIC-Insured - Backed by the full faith and credit of the U.S. Government</span>
@@ -131,81 +187,97 @@ export default function ClientLogin() {
 
         <div className="login-grid">
           
-          {/* Left Side: Form */}
+          {/* DYNAMIC LEFT COLUMN */}
           <div>
             <h1>Account login</h1>
-            
             {error && <div className="error-msg">{error}</div>}
-            
-            <form onSubmit={handleLogin}>
-              <div className="input-group">
-                <label className="floating-label">Username</label>
-                <input 
-                  type="text" 
-                  className="clean-input" 
-                  value={username} 
-                  onChange={(e) => setUsername(e.target.value)} 
-                  disabled={isLoading}
-                />
-              </div>
 
-              <div className="checkbox-row">
-                <input type="checkbox" id="remember" />
-                <label htmlFor="remember">Remember my username</label>
-              </div>
-
-              <div className="input-group">
-                <label className="floating-label">Password</label>
-                <input 
-                  type={showPassword ? "text" : "password"} 
-                  className="clean-input" 
-                  value={password} 
-                  onChange={(e) => setPassword(e.target.value)}
-                  disabled={isLoading} 
-                />
-                <button 
-                  type="button" 
-                  className="show-toggle" 
-                  onClick={() => setShowPassword(!showPassword)}
-                  disabled={isLoading}
-                >
-                  {showPassword ? 'Hide' : 'Show'}
+            {/* MODE 1: MANAGER PASSWORD LOGIN */}
+            {loginMode === 'password' && (
+              <form onSubmit={handlePasswordLogin}>
+                <div className="input-group">
+                  <label className="floating-label">Username (Email)</label>
+                  <input type="email" className="clean-input" value={username} onChange={(e) => setUsername(e.target.value)} disabled={isLoading} placeholder="manager@vault.com" />
+                </div>
+                <div className="input-group">
+                  <label className="floating-label">Password</label>
+                  <input type={showPassword ? "text" : "password"} className="clean-input" value={password} onChange={(e) => setPassword(e.target.value)} disabled={isLoading} />
+                  <button type="button" className="show-toggle" onClick={() => setShowPassword(!showPassword)} disabled={isLoading}>
+                    {showPassword ? 'Hide' : 'Show'}
+                  </button>
+                </div>
+                <button type="submit" className="btn-solid" disabled={isLoading}>
+                  {isLoading ? <><div className="spinner"></div> Authenticating...</> : 'Log in with password'}
                 </button>
-              </div>
+                <div className="divider">OR</div>
+                <button type="button" className="btn-outline" onClick={() => setLoginMode('otp_request')} disabled={isLoading}>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M22 6c0-1.1-.9-2-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6zm-2 0l-8 5-8-5h16zm0 12H4V8l8 5 8-5v10z"/>
+                  </svg>
+                  Use Secure Email Code
+                </button>
+                <a href="#" className="forgot-link">Forgot username or password <span>›</span></a>
+              </form>
+            )}
 
-              <button type="submit" className="btn-solid" disabled={isLoading}>
-                {isLoading ? <><div className="spinner"></div> Authenticating...</> : 'Log in with password'}
-              </button>
+            {/* MODE 2: CLIENT OTP REQUEST */}
+            {loginMode === 'otp_request' && (
+              <form onSubmit={handleOtpRequest}>
+                <div style={{ marginBottom: '24px', fontSize: '15px', color: '#4b5563', lineHeight: 1.5 }}>
+                  Enter your registered email address. We will send a secure, single-use 6-digit code to your inbox to verify your identity.
+                </div>
+                <div className="input-group">
+                  <label className="floating-label">Registered Email</label>
+                  <input type="email" className="clean-input" value={username} onChange={(e) => setUsername(e.target.value)} disabled={isLoading} placeholder="client@example.com" />
+                </div>
+                <button type="submit" className="btn-solid" disabled={isLoading}>
+                  {isLoading ? <><div className="spinner"></div> Sending Secure Code...</> : 'Send Verification Code'}
+                </button>
+                <div className="divider">OR</div>
+                <button type="button" className="btn-outline" onClick={() => setLoginMode('password')} disabled={isLoading}>
+                  Use Password Login
+                </button>
+              </form>
+            )}
 
-              <div className="divider">OR</div>
-
-              <button type="button" className="btn-outline" disabled={isLoading}>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
-                </svg>
-                Use passkey
-              </button>
-
-              <a href="#" className="forgot-link">Forgot username or password <span>›</span></a>
-            </form>
+            {/* MODE 3: CLIENT OTP VERIFICATION */}
+            {loginMode === 'otp_verify' && (
+              <form onSubmit={handleOtpVerify}>
+                <div className="success-msg">✓ Secure code dispatched to {username}</div>
+                <div className="input-group">
+                  <label className="floating-label">Enter 6-Digit Code</label>
+                  <input 
+                    type="text" 
+                    maxLength={6} 
+                    className="clean-input" 
+                    value={otpToken} 
+                    onChange={(e) => setOtpToken(e.target.value.replace(/[^0-9]/g, ''))} 
+                    disabled={isLoading} 
+                    placeholder="000000" 
+                    style={{ fontSize: '24px', letterSpacing: '4px', textAlign: 'center' }} 
+                  />
+                </div>
+                <button type="submit" className="btn-solid" disabled={isLoading}>
+                  {isLoading ? <><div className="spinner"></div> Verifying Identity...</> : 'Verify & Log In'}
+                </button>
+                <div className="divider">OR</div>
+                <button type="button" className="btn-outline" onClick={() => setLoginMode('otp_request')} disabled={isLoading}>
+                  Request a New Code
+                </button>
+              </form>
+            )}
           </div>
 
-          {/* Right Side: Passkey Advertisement */}
+          {/* RIGHT COLUMN */}
           <div>
             <div className="passkey-card">
-              {/* Custom SVG replicating the exact blue avatar/key icon */}
               <svg width="80" height="80" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <circle cx="28" cy="22" r="10" fill="#2563eb"/>
-                <path d="M8 50C8 40 16 36 28 36C40 36 46 38.5 49 43.5V50H8Z" fill="#2563eb"/>
-                <circle cx="50" cy="26" r="6" fill="#2563eb"/>
-                <path d="M48 31V44H52V40H56V36H52V31Z" fill="#2563eb"/>
+                <path d="M32 8L12 16V30C12 43.08 20.52 55.22 32 60C43.48 55.22 52 43.08 52 30V16L32 8Z" fill="#eff6ff" stroke="#2563eb" strokeWidth="4" strokeLinejoin="round"/>
+                <path d="M24 32L29 37L40 25" stroke="#2563eb" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
-
-              <h2 className="passkey-title">Don't have a passkey yet?</h2>
-              <p className="passkey-desc">
-                Add a passkey to log in using your face, fingerprint or the code you use to unlock your device. It's faster and more secure than a password.
-              </p>
-              <a href="#" className="learn-more">Learn more <span>›</span></a>
+              <h2 className="passkey-title">Enhanced Security Active</h2>
+              <p className="passkey-desc">To protect your assets, Global Vault utilizes military-grade email verification. When you request a code, a secure, single-use token will be dispatched directly to your registered inbox.</p>
+              <a href="#" className="learn-more">Learn about our security <span>›</span></a>
             </div>
           </div>
 
