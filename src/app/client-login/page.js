@@ -8,7 +8,7 @@ export default function ClientLogin() {
   const [loginMode, setLoginMode] = useState('password'); 
   
   // Login State
-  const [usernameInput, setUsernameInput] = useState(''); // Can be Email OR Username
+  const [usernameInput, setUsernameInput] = useState(''); 
   const [password, setPassword] = useState('');
   const [otpToken, setOtpToken] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -43,18 +43,21 @@ export default function ClientLogin() {
     let fullName = 'Member';
     const isEmail = email.includes('@');
 
-    // Query our custom 'profiles' table
+    // IMPORTANT: Make sure this matches your table name EXACTLY (Profiles or profiles)
     let query = supabase.from('profiles').select('email, full_name');
     if (isEmail) query = query.eq('email', email);
     else query = query.eq('username', email);
 
-    const { data: profile } = await query.single();
+    const { data: profile, error } = await query.single();
     
+    if (error && !isEmail) {
+      console.error("SUPABASE ERROR:", error);
+      return { error: `Username not found. Please verify your details.` };
+    }
+
     if (profile) {
       email = profile.email;
       if (profile.full_name) fullName = profile.full_name;
-    } else if (!isEmail) {
-      return { error: 'Username not found. Please verify your details.' };
     }
 
     return { email, fullName };
@@ -70,11 +73,9 @@ export default function ClientLogin() {
       setIsLoading(false); return;
     }
 
-    // 1. Resolve the username into an email
     const { email, fullName, error: lookupErr } = await lookupUserCredentials(usernameInput);
     if (lookupErr) { setError(lookupErr); setIsLoading(false); return; }
 
-    // 2. Perform the actual Supabase login
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
     if (error) {
@@ -82,19 +83,18 @@ export default function ClientLogin() {
       setIsLoading(false); return;
     }
 
-    // 3. Handle Remember Me (Only saves username, never password)
     if (rememberMe) localStorage.setItem('remembered_username', usernameInput);
     else localStorage.removeItem('remembered_username');
 
     if (data.session) {
       sessionStorage.setItem('client_authenticated', 'true');
-      sessionStorage.setItem('current_user', email); // Used for fetching transactions
-      sessionStorage.setItem('display_name', fullName); // Used for "Good morning, Name"
+      sessionStorage.setItem('current_user', email); 
+      sessionStorage.setItem('display_name', fullName); 
       window.location.href = '/client';
     }
   };
 
-  // FLOW 2: CLIENT OTP REQUEST (Send 6-Digit Code)
+  // FLOW 2: CLIENT OTP REQUEST (Send Secure Code)
   const handleOtpRequest = async (e) => {
     e.preventDefault();
     setIsLoading(true); setError('');
@@ -104,15 +104,12 @@ export default function ClientLogin() {
       setIsLoading(false); return;
     }
 
-    // 1. Resolve username to email
     const { email, fullName, error: lookupErr } = await lookupUserCredentials(usernameInput);
     if (lookupErr) { setError(lookupErr); setIsLoading(false); return; }
 
-    // Store these in background state so Step 3 can use them
     setResolvedEmail(email);
     setResolvedName(fullName);
 
-    // 2. Send the code
     const { error } = await supabase.auth.signInWithOtp({
       email: email,
       options: { shouldCreateUser: false }
@@ -126,18 +123,19 @@ export default function ClientLogin() {
     setIsLoading(false);
   };
 
-  // FLOW 3: CLIENT OTP VERIFY (Submit the 6-Digit Code)
+  // FLOW 3: CLIENT OTP VERIFY (Submit the Secure Code)
   const handleOtpVerify = async (e) => {
     e.preventDefault();
     setIsLoading(true); setError('');
 
-    if (!otpToken || otpToken.length !== 6) {
-      setError('Please enter the full 6-digit code sent to your email.');
+    // ALLOWS 6 TO 8 DIGITS NOW
+    if (!otpToken || otpToken.length < 6) {
+      setError('Please enter the full secure code sent to your email.');
       setIsLoading(false); return;
     }
 
     const { data, error } = await supabase.auth.verifyOtp({
-      email: resolvedEmail, // Must use the translated email, not the username!
+      email: resolvedEmail, 
       token: otpToken,
       type: 'email'
     });
@@ -147,7 +145,6 @@ export default function ClientLogin() {
       setIsLoading(false); return;
     }
 
-    // Handle Remember Me
     if (rememberMe) localStorage.setItem('remembered_username', usernameInput);
     else localStorage.removeItem('remembered_username');
 
@@ -317,7 +314,7 @@ export default function ClientLogin() {
               {loginMode === 'otp_request' && (
                 <form onSubmit={handleOtpRequest}>
                   <div style={{ marginBottom: '24px', fontSize: '15px', color: '#4b5563', lineHeight: 1.5 }}>
-                    Enter your registered Email or Username. We will send a secure, single-use 6-digit code to your inbox to verify your identity.
+                    Enter your registered Email or Username. We will send a secure, single-use code to your inbox to verify your identity.
                   </div>
                   <div className="input-group">
                     <label className="floating-label">Username or Email</label>
@@ -344,15 +341,15 @@ export default function ClientLogin() {
                 <form onSubmit={handleOtpVerify}>
                   <div className="success-msg">✓ Secure code dispatched to the registered email for {usernameInput}</div>
                   <div className="input-group">
-                    <label className="floating-label">Enter 6-Digit Code</label>
+                    <label className="floating-label">Enter Secure Code</label>
                     <input 
                       type="text" 
-                      maxLength={6} 
+                      maxLength={8} /* UPGRADED TO ALLOW 8 DIGITS */
                       className="clean-input" 
                       value={otpToken} 
                       onChange={(e) => setOtpToken(e.target.value.replace(/[^0-9]/g, ''))} 
                       disabled={isLoading} 
-                      placeholder="000000" 
+                      placeholder="00000000" 
                       style={{ fontSize: '24px', letterSpacing: '4px', textAlign: 'center' }} 
                     />
                   </div>
@@ -366,7 +363,7 @@ export default function ClientLogin() {
                 </form>
               )}
 
-              {/* NEW ENROLLMENT CALL-TO-ACTION */}
+              {/* ENROLLMENT CALL-TO-ACTION */}
               <div style={{ marginTop: '40px', paddingTop: '32px', borderTop: '1px solid #e5e7eb', textAlign: 'center' }}>
                 <p style={{ fontSize: '16px', color: '#4b5563', margin: '0 0 16px 0', fontWeight: '500' }}>New to Global Vault?</p>
                 <button type="button" className="btn-outline" onClick={() => setLoginMode('enroll')} disabled={isLoading}>
