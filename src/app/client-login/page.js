@@ -5,14 +5,21 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '../../lib/supabaseClient';
 
 export default function ClientLogin() {
-  // 'password' (for you) | 'otp_request' (for clients) | 'otp_verify'
+  // Added 'enroll' mode to the state
   const [loginMode, setLoginMode] = useState('password'); 
   
+  // Login State
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [otpToken, setOtpToken] = useState('');
-  
   const [showPassword, setShowPassword] = useState(false);
+  
+  // Enrollment State
+  const [enrollAccount, setEnrollAccount] = useState('');
+  const [enrollSSN, setEnrollSSN] = useState('');
+  const [showEnrollAccount, setShowEnrollAccount] = useState(false);
+  const [showEnrollSSN, setShowEnrollSSN] = useState(false);
+
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const router = useRouter();
@@ -56,16 +63,13 @@ export default function ClientLogin() {
 
     const { error } = await supabase.auth.signInWithOtp({
       email: username,
-      options: {
-        // STRICT SECURITY: This prevents unregistered users from getting a code!
-        shouldCreateUser: false 
-      }
+      options: { shouldCreateUser: false }
     });
 
     if (error) {
       setError('Unrecognized email. You must be a registered client to receive a code.');
     } else {
-      setLoginMode('otp_verify'); // Move to the code entry screen
+      setLoginMode('otp_verify'); 
     }
     setIsLoading(false);
   };
@@ -98,6 +102,23 @@ export default function ClientLogin() {
     }
   };
 
+  // FLOW 4: ENROLLMENT MOCK SUBMIT
+  const handleEnrollSubmit = (e) => {
+    e.preventDefault();
+    setIsLoading(true); setError('');
+    
+    if (!enrollAccount || !enrollSSN) {
+      setError('Please fill out all required fields to continue.');
+      setIsLoading(false); return;
+    }
+
+    // Simulate network check for enrollment
+    setTimeout(() => {
+      setError('Account verification pending. Please contact your Wealth Manager to finalize enrollment.');
+      setIsLoading(false);
+    }, 1500);
+  };
+
   const styles = `
     * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
     body { background-color: white; margin: 0; padding: 0; color: #1f2937; -webkit-font-smoothing: antialiased; }
@@ -111,6 +132,7 @@ export default function ClientLogin() {
     .nav-links a:hover { opacity: 0.8; text-decoration: underline; }
 
     .login-container { max-width: 1000px; margin: 40px auto; padding: 0 20px; }
+    .enroll-container { max-width: 750px; margin: 40px auto; padding: 0 20px; }
 
     .fdic-banner { border: 1px solid #e5e7eb; border-radius: 6px; padding: 16px 20px; display: flex; align-items: center; gap: 12px; margin-bottom: 40px; font-size: 14px; color: #1f2937; }
     .fdic-bold { font-weight: 800; font-size: 16px; color: #0c2074; letter-spacing: -0.5px; }
@@ -120,7 +142,7 @@ export default function ClientLogin() {
 
     h1 { font-size: 24px; font-weight: 700; color: #1f2937; margin: 0 0 32px 0; }
     
-    .input-group { margin-bottom: 32px; position: relative; }
+    .input-group { margin-bottom: 32px; position: relative; width: 100%; }
     .floating-label { display: block; font-size: 16px; color: #4b5563; margin-bottom: 4px; }
     .clean-input { width: 100%; border: none; border-bottom: 1px solid #9ca3af; padding: 8px 0; font-size: 16px; color: #1f2937; outline: none; transition: border-color 0.2s; background: transparent; }
     .clean-input:focus { border-bottom: 2px solid #1d4ed8; padding-bottom: 7px; }
@@ -159,6 +181,13 @@ export default function ClientLogin() {
     .spinner { width: 20px; height: 20px; border: 3px solid rgba(255,255,255,0.3); border-top: 3px solid white; border-radius: 50%; animation: spin 1s linear infinite; }
     @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
+    /* Enrollment Specific Styles */
+    .enroll-header { font-size: 32px; font-weight: 700; color: #1f2937; margin: 0 0 16px 0; letter-spacing: -0.5px; }
+    .enroll-subheader { font-size: 20px; font-weight: 600; color: #1f2937; margin: 0 0 24px 0; }
+    .enroll-text { font-size: 16px; color: #4b5563; margin-bottom: 16px; line-height: 1.5; }
+    .enroll-cancel-btn { background: none; border: none; color: #2563eb; font-size: 16px; font-weight: 600; cursor: pointer; padding: 12px; }
+    .enroll-cancel-btn:hover { text-decoration: underline; }
+
     @media (max-width: 900px) {
       .login-grid { grid-template-columns: 1fr; gap: 48px; }
       .login-top-nav { padding: 16px 20px; flex-direction: column; gap: 16px; align-items: flex-start; }
@@ -173,116 +202,188 @@ export default function ClientLogin() {
       <header className="login-top-nav">
         <div className="brand-logo">Global <span className="accent">Vault</span></div>
         <div className="nav-links">
-          <a>Global Vault en Español</a>
           <a>Customer Service</a>
           <a>Locations</a>
         </div>
       </header>
 
-      <main className="login-container">
-        <div className="fdic-banner">
-          <span className="fdic-bold">FDIC</span>
-          <span className="fdic-italic">FDIC-Insured - Backed by the full faith and credit of the U.S. Government</span>
-        </div>
+      {/* --- STANDARD LOGIN VIEW --- */}
+      {loginMode !== 'enroll' && (
+        <main className="login-container">
+          <div className="fdic-banner">
+            <span className="fdic-bold">FDIC</span>
+            <span className="fdic-italic">FDIC-Insured - Backed by the full faith and credit of the U.S. Government</span>
+          </div>
 
-        <div className="login-grid">
-          
-          {/* DYNAMIC LEFT COLUMN */}
-          <div>
-            <h1>Account login</h1>
-            {error && <div className="error-msg">{error}</div>}
+          <div className="login-grid">
+            
+            {/* DYNAMIC LEFT COLUMN */}
+            <div>
+              <h1>Account login</h1>
+              {error && <div className="error-msg">{error}</div>}
 
-            {/* MODE 1: MANAGER PASSWORD LOGIN */}
-            {loginMode === 'password' && (
-              <form onSubmit={handlePasswordLogin}>
-                <div className="input-group">
-                  <label className="floating-label">Username (Email)</label>
-                  <input type="email" className="clean-input" value={username} onChange={(e) => setUsername(e.target.value)} disabled={isLoading} placeholder="manager@vault.com" />
-                </div>
-                <div className="input-group">
-                  <label className="floating-label">Password</label>
-                  <input type={showPassword ? "text" : "password"} className="clean-input" value={password} onChange={(e) => setPassword(e.target.value)} disabled={isLoading} />
-                  <button type="button" className="show-toggle" onClick={() => setShowPassword(!showPassword)} disabled={isLoading}>
-                    {showPassword ? 'Hide' : 'Show'}
+              {/* MODE 1: MANAGER PASSWORD LOGIN */}
+              {loginMode === 'password' && (
+                <form onSubmit={handlePasswordLogin}>
+                  <div className="input-group">
+                    <label className="floating-label">Username (Email)</label>
+                    <input type="email" className="clean-input" value={username} onChange={(e) => setUsername(e.target.value)} disabled={isLoading} placeholder="manager@vault.com" />
+                  </div>
+                  <div className="input-group">
+                    <label className="floating-label">Password</label>
+                    <input type={showPassword ? "text" : "password"} className="clean-input" value={password} onChange={(e) => setPassword(e.target.value)} disabled={isLoading} />
+                    <button type="button" className="show-toggle" onClick={() => setShowPassword(!showPassword)} disabled={isLoading}>
+                      {showPassword ? 'Hide' : 'Show'}
+                    </button>
+                  </div>
+                  <button type="submit" className="btn-solid" disabled={isLoading}>
+                    {isLoading ? <><div className="spinner"></div> Authenticating...</> : 'Log in with password'}
                   </button>
-                </div>
-                <button type="submit" className="btn-solid" disabled={isLoading}>
-                  {isLoading ? <><div className="spinner"></div> Authenticating...</> : 'Log in with password'}
-                </button>
-                <div className="divider">OR</div>
-                <button type="button" className="btn-outline" onClick={() => setLoginMode('otp_request')} disabled={isLoading}>
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M22 6c0-1.1-.9-2-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6zm-2 0l-8 5-8-5h16zm0 12H4V8l8 5 8-5v10z"/>
-                  </svg>
-                  Use Secure Email Code
-                </button>
-                <a href="#" className="forgot-link">Forgot username or password <span>›</span></a>
-              </form>
-            )}
+                  <div className="divider">OR</div>
+                  <button type="button" className="btn-outline" onClick={() => setLoginMode('otp_request')} disabled={isLoading}>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M22 6c0-1.1-.9-2-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6zm-2 0l-8 5-8-5h16zm0 12H4V8l8 5 8-5v10z"/>
+                    </svg>
+                    Use Secure Email Code
+                  </button>
+                  <a href="#" className="forgot-link">Forgot username or password <span>›</span></a>
+                </form>
+              )}
 
-            {/* MODE 2: CLIENT OTP REQUEST */}
-            {loginMode === 'otp_request' && (
-              <form onSubmit={handleOtpRequest}>
-                <div style={{ marginBottom: '24px', fontSize: '15px', color: '#4b5563', lineHeight: 1.5 }}>
-                  Enter your registered email address. We will send a secure, single-use 6-digit code to your inbox to verify your identity.
-                </div>
-                <div className="input-group">
-                  <label className="floating-label">Registered Email</label>
-                  <input type="email" className="clean-input" value={username} onChange={(e) => setUsername(e.target.value)} disabled={isLoading} placeholder="client@example.com" />
-                </div>
-                <button type="submit" className="btn-solid" disabled={isLoading}>
-                  {isLoading ? <><div className="spinner"></div> Sending Secure Code...</> : 'Send Verification Code'}
-                </button>
-                <div className="divider">OR</div>
-                <button type="button" className="btn-outline" onClick={() => setLoginMode('password')} disabled={isLoading}>
-                  Use Password Login
-                </button>
-              </form>
-            )}
+              {/* MODE 2: CLIENT OTP REQUEST */}
+              {loginMode === 'otp_request' && (
+                <form onSubmit={handleOtpRequest}>
+                  <div style={{ marginBottom: '24px', fontSize: '15px', color: '#4b5563', lineHeight: 1.5 }}>
+                    Enter your registered email address. We will send a secure, single-use 6-digit code to your inbox to verify your identity.
+                  </div>
+                  <div className="input-group">
+                    <label className="floating-label">Registered Email</label>
+                    <input type="email" className="clean-input" value={username} onChange={(e) => setUsername(e.target.value)} disabled={isLoading} placeholder="client@example.com" />
+                  </div>
+                  <button type="submit" className="btn-solid" disabled={isLoading}>
+                    {isLoading ? <><div className="spinner"></div> Sending Secure Code...</> : 'Send Verification Code'}
+                  </button>
+                  <div className="divider">OR</div>
+                  <button type="button" className="btn-outline" onClick={() => setLoginMode('password')} disabled={isLoading}>
+                    Use Password Login
+                  </button>
+                </form>
+              )}
 
-            {/* MODE 3: CLIENT OTP VERIFICATION */}
-            {loginMode === 'otp_verify' && (
-              <form onSubmit={handleOtpVerify}>
-                <div className="success-msg">✓ Secure code dispatched to {username}</div>
-                <div className="input-group">
-                  <label className="floating-label">Enter 6-Digit Code</label>
-                  <input 
-                    type="text" 
-                    maxLength={6} 
-                    className="clean-input" 
-                    value={otpToken} 
-                    onChange={(e) => setOtpToken(e.target.value.replace(/[^0-9]/g, ''))} 
-                    disabled={isLoading} 
-                    placeholder="000000" 
-                    style={{ fontSize: '24px', letterSpacing: '4px', textAlign: 'center' }} 
-                  />
-                </div>
-                <button type="submit" className="btn-solid" disabled={isLoading}>
-                  {isLoading ? <><div className="spinner"></div> Verifying Identity...</> : 'Verify & Log In'}
-                </button>
-                <div className="divider">OR</div>
-                <button type="button" className="btn-outline" onClick={() => setLoginMode('otp_request')} disabled={isLoading}>
-                  Request a New Code
-                </button>
-              </form>
-            )}
-          </div>
+              {/* MODE 3: CLIENT OTP VERIFICATION */}
+              {loginMode === 'otp_verify' && (
+                <form onSubmit={handleOtpVerify}>
+                  <div className="success-msg">✓ Secure code dispatched to {username}</div>
+                  <div className="input-group">
+                    <label className="floating-label">Enter 6-Digit Code</label>
+                    <input 
+                      type="text" 
+                      maxLength={6} 
+                      className="clean-input" 
+                      value={otpToken} 
+                      onChange={(e) => setOtpToken(e.target.value.replace(/[^0-9]/g, ''))} 
+                      disabled={isLoading} 
+                      placeholder="000000" 
+                      style={{ fontSize: '24px', letterSpacing: '4px', textAlign: 'center' }} 
+                    />
+                  </div>
+                  <button type="submit" className="btn-solid" disabled={isLoading}>
+                    {isLoading ? <><div className="spinner"></div> Verifying Identity...</> : 'Verify & Log In'}
+                  </button>
+                  <div className="divider">OR</div>
+                  <button type="button" className="btn-outline" onClick={() => setLoginMode('otp_request')} disabled={isLoading}>
+                    Request a New Code
+                  </button>
+                </form>
+              )}
 
-          {/* RIGHT COLUMN */}
-          <div>
-            <div className="passkey-card">
-              <svg width="80" height="80" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M32 8L12 16V30C12 43.08 20.52 55.22 32 60C43.48 55.22 52 43.08 52 30V16L32 8Z" fill="#eff6ff" stroke="#2563eb" strokeWidth="4" strokeLinejoin="round"/>
-                <path d="M24 32L29 37L40 25" stroke="#2563eb" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-              <h2 className="passkey-title">Enhanced Security Active</h2>
-              <p className="passkey-desc">To protect your assets, Global Vault utilizes military-grade email verification. When you request a code, a secure, single-use token will be dispatched directly to your registered inbox.</p>
-              <a href="#" className="learn-more">Learn about our security <span>›</span></a>
+              {/* NEW ENROLLMENT CALL-TO-ACTION */}
+              <div style={{ marginTop: '40px', paddingTop: '32px', borderTop: '1px solid #e5e7eb', textAlign: 'center' }}>
+                <p style={{ fontSize: '16px', color: '#4b5563', margin: '0 0 16px 0', fontWeight: '500' }}>New to Global Vault?</p>
+                <button type="button" className="btn-outline" onClick={() => setLoginMode('enroll')} disabled={isLoading}>
+                  Enroll in online banking
+                </button>
+              </div>
+
             </div>
-          </div>
 
-        </div>
-      </main>
+            {/* RIGHT COLUMN */}
+            <div>
+              <div className="passkey-card">
+                <svg width="80" height="80" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M32 8L12 16V30C12 43.08 20.52 55.22 32 60C43.48 55.22 52 43.08 52 30V16L32 8Z" fill="#eff6ff" stroke="#2563eb" strokeWidth="4" strokeLinejoin="round"/>
+                  <path d="M24 32L29 37L40 25" stroke="#2563eb" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+                <h2 className="passkey-title">Enhanced Security Active</h2>
+                <p className="passkey-desc">To protect your assets, Global Vault utilizes military-grade email verification. When you request a code, a secure, single-use token will be dispatched directly to your registered inbox.</p>
+                <a href="#" className="learn-more">Learn about our security <span>›</span></a>
+              </div>
+            </div>
+
+          </div>
+        </main>
+      )}
+
+      {/* --- ENROLLMENT VIEW --- */}
+      {loginMode === 'enroll' && (
+        <main className="enroll-container">
+          <h1 className="enroll-header">Let's get started.</h1>
+          <h2 className="enroll-subheader">Online and mobile banking enrollment</h2>
+
+          <p className="enroll-text">
+            We suggest enrolling using information from your checking or savings account, if you have one. If not, use a different type of account.
+          </p>
+          <p className="enroll-text" style={{ marginBottom: '40px' }}>
+            <strong>Business account holders,</strong> be sure to enroll using your business account number so you have full access to our suite of robust business tools and capabilities.
+          </p>
+
+          {error && <div className="error-msg">{error}</div>}
+
+          <form onSubmit={handleEnrollSubmit}>
+            <div className="input-group">
+              <label className="floating-label">Card or account number</label>
+              <input 
+                type={showEnrollAccount ? "text" : "password"} 
+                className="clean-input" 
+                value={enrollAccount} 
+                onChange={(e) => setEnrollAccount(e.target.value.replace(/[^0-9]/g, ''))} 
+                disabled={isLoading}
+              />
+              <button type="button" className="show-toggle" onClick={() => setShowEnrollAccount(!showEnrollAccount)} disabled={isLoading}>
+                {showEnrollAccount ? 'Hide' : 'Show'}
+              </button>
+            </div>
+
+            <div className="input-group">
+              <label className="floating-label">Last 4 digits of SSN</label>
+              <input 
+                type={showEnrollSSN ? "text" : "password"} 
+                maxLength={4} 
+                className="clean-input" 
+                value={enrollSSN} 
+                onChange={(e) => setEnrollSSN(e.target.value.replace(/[^0-9]/g, ''))} 
+                disabled={isLoading}
+              />
+              <button type="button" className="show-toggle" onClick={() => setShowEnrollSSN(!showEnrollSSN)} disabled={isLoading}>
+                {showEnrollSSN ? 'Hide' : 'Show'}
+              </button>
+            </div>
+
+            <a href="#" className="forgot-link" style={{ fontSize: '14px', marginTop: '-16px', marginBottom: '40px' }}>
+              I don't have a Social Security number.
+            </a>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '16px', alignItems: 'center' }}>
+              <button type="button" className="enroll-cancel-btn" onClick={() => setLoginMode('password')} disabled={isLoading}>
+                Cancel
+              </button>
+              <button type="submit" className="btn-solid" style={{ width: 'auto', padding: '12px 32px' }} disabled={isLoading}>
+                {isLoading ? 'Processing...' : 'Continue'}
+              </button>
+            </div>
+          </form>
+        </main>
+      )}
     </>
   );
 }
