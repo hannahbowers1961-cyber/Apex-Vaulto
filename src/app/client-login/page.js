@@ -1,19 +1,23 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '../../lib/supabaseClient';
 
 export default function ClientLogin() {
-  // Added 'enroll' mode to the state
   const [loginMode, setLoginMode] = useState('password'); 
   
   // Login State
-  const [username, setUsername] = useState('');
+  const [usernameInput, setUsernameInput] = useState(''); // Can be Email OR Username
   const [password, setPassword] = useState('');
   const [otpToken, setOtpToken] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
   
+  // Background State for OTP translation
+  const [resolvedEmail, setResolvedEmail] = useState('');
+  const [resolvedName, setResolvedName] = useState('Member');
+
   // Enrollment State
   const [enrollAccount, setEnrollAccount] = useState('');
   const [enrollSSN, setEnrollSSN] = useState('');
@@ -24,29 +28,68 @@ export default function ClientLogin() {
   const [error, setError] = useState('');
   const router = useRouter();
 
+  // Load remembered username on startup
+  useEffect(() => {
+    const savedUsername = localStorage.getItem('remembered_username');
+    if (savedUsername) {
+      setUsernameInput(savedUsername);
+      setRememberMe(true);
+    }
+  }, []);
+
+  // HELPER: Translate Username to Email & Get Full Name
+  const lookupUserCredentials = async (input) => {
+    let email = input.trim();
+    let fullName = 'Member';
+    const isEmail = email.includes('@');
+
+    // Query our custom 'profiles' table
+    let query = supabase.from('profiles').select('email, full_name');
+    if (isEmail) query = query.eq('email', email);
+    else query = query.eq('username', email);
+
+    const { data: profile } = await query.single();
+    
+    if (profile) {
+      email = profile.email;
+      if (profile.full_name) fullName = profile.full_name;
+    } else if (!isEmail) {
+      return { error: 'Username not found. Please verify your details.' };
+    }
+
+    return { email, fullName };
+  };
+
   // FLOW 1: MANAGER BYPASS (Instant Password Login)
   const handlePasswordLogin = async (e) => {
     e.preventDefault();
     setIsLoading(true); setError('');
 
-    if (!username || !password) {
-      setError('Please enter both your email and password.');
+    if (!usernameInput || !password) {
+      setError('Please enter your username/email and password.');
       setIsLoading(false); return;
     }
 
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email: username,
-      password: password,
-    });
+    // 1. Resolve the username into an email
+    const { email, fullName, error: lookupErr } = await lookupUserCredentials(usernameInput);
+    if (lookupErr) { setError(lookupErr); setIsLoading(false); return; }
+
+    // 2. Perform the actual Supabase login
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
     if (error) {
-      setError('Invalid credentials. Please verify your email and password.');
+      setError('Invalid credentials. Please try again.');
       setIsLoading(false); return;
     }
+
+    // 3. Handle Remember Me (Only saves username, never password)
+    if (rememberMe) localStorage.setItem('remembered_username', usernameInput);
+    else localStorage.removeItem('remembered_username');
 
     if (data.session) {
       sessionStorage.setItem('client_authenticated', 'true');
-      sessionStorage.setItem('current_user', data.user.email);
+      sessionStorage.setItem('current_user', email); // Used for fetching transactions
+      sessionStorage.setItem('display_name', fullName); // Used for "Good morning, Name"
       window.location.href = '/client';
     }
   };
@@ -56,18 +99,27 @@ export default function ClientLogin() {
     e.preventDefault();
     setIsLoading(true); setError('');
 
-    if (!username) {
-      setError('Please enter your registered email address.');
+    if (!usernameInput) {
+      setError('Please enter your registered Email or Username.');
       setIsLoading(false); return;
     }
 
+    // 1. Resolve username to email
+    const { email, fullName, error: lookupErr } = await lookupUserCredentials(usernameInput);
+    if (lookupErr) { setError(lookupErr); setIsLoading(false); return; }
+
+    // Store these in background state so Step 3 can use them
+    setResolvedEmail(email);
+    setResolvedName(fullName);
+
+    // 2. Send the code
     const { error } = await supabase.auth.signInWithOtp({
-      email: username,
+      email: email,
       options: { shouldCreateUser: false }
     });
 
     if (error) {
-      setError('Unrecognized email. You must be a registered client to receive a code.');
+      setError('Unrecognized account. You must be pre-registered to receive a code.');
     } else {
       setLoginMode('otp_verify'); 
     }
@@ -85,7 +137,7 @@ export default function ClientLogin() {
     }
 
     const { data, error } = await supabase.auth.verifyOtp({
-      email: username,
+      email: resolvedEmail, // Must use the translated email, not the username!
       token: otpToken,
       type: 'email'
     });
@@ -95,9 +147,14 @@ export default function ClientLogin() {
       setIsLoading(false); return;
     }
 
+    // Handle Remember Me
+    if (rememberMe) localStorage.setItem('remembered_username', usernameInput);
+    else localStorage.removeItem('remembered_username');
+
     if (data.session) {
       sessionStorage.setItem('client_authenticated', 'true');
-      sessionStorage.setItem('current_user', data.user.email);
+      sessionStorage.setItem('current_user', resolvedEmail);
+      sessionStorage.setItem('display_name', resolvedName);
       window.location.href = '/client';
     }
   };
@@ -112,7 +169,6 @@ export default function ClientLogin() {
       setIsLoading(false); return;
     }
 
-    // Simulate network check for enrollment
     setTimeout(() => {
       setError('Account verification pending. Please contact your Wealth Manager to finalize enrollment.');
       setIsLoading(false);
@@ -226,9 +282,15 @@ export default function ClientLogin() {
               {loginMode === 'password' && (
                 <form onSubmit={handlePasswordLogin}>
                   <div className="input-group">
-                    <label className="floating-label">Username (Email)</label>
-                    <input type="email" className="clean-input" value={username} onChange={(e) => setUsername(e.target.value)} disabled={isLoading} placeholder="manager@vault.com" />
+                    <label className="floating-label">Username or Email</label>
+                    <input type="text" className="clean-input" value={usernameInput} onChange={(e) => setUsernameInput(e.target.value)} disabled={isLoading} />
                   </div>
+
+                  <div className="checkbox-row">
+                    <input type="checkbox" id="remember" checked={rememberMe} onChange={(e) => setRememberMe(e.target.checked)} />
+                    <label htmlFor="remember">Remember my username</label>
+                  </div>
+
                   <div className="input-group">
                     <label className="floating-label">Password</label>
                     <input type={showPassword ? "text" : "password"} className="clean-input" value={password} onChange={(e) => setPassword(e.target.value)} disabled={isLoading} />
@@ -236,6 +298,7 @@ export default function ClientLogin() {
                       {showPassword ? 'Hide' : 'Show'}
                     </button>
                   </div>
+                  
                   <button type="submit" className="btn-solid" disabled={isLoading}>
                     {isLoading ? <><div className="spinner"></div> Authenticating...</> : 'Log in with password'}
                   </button>
@@ -254,12 +317,18 @@ export default function ClientLogin() {
               {loginMode === 'otp_request' && (
                 <form onSubmit={handleOtpRequest}>
                   <div style={{ marginBottom: '24px', fontSize: '15px', color: '#4b5563', lineHeight: 1.5 }}>
-                    Enter your registered email address. We will send a secure, single-use 6-digit code to your inbox to verify your identity.
+                    Enter your registered Email or Username. We will send a secure, single-use 6-digit code to your inbox to verify your identity.
                   </div>
                   <div className="input-group">
-                    <label className="floating-label">Registered Email</label>
-                    <input type="email" className="clean-input" value={username} onChange={(e) => setUsername(e.target.value)} disabled={isLoading} placeholder="client@example.com" />
+                    <label className="floating-label">Username or Email</label>
+                    <input type="text" className="clean-input" value={usernameInput} onChange={(e) => setUsernameInput(e.target.value)} disabled={isLoading} />
                   </div>
+
+                  <div className="checkbox-row">
+                    <input type="checkbox" id="remember" checked={rememberMe} onChange={(e) => setRememberMe(e.target.checked)} />
+                    <label htmlFor="remember">Remember my username</label>
+                  </div>
+
                   <button type="submit" className="btn-solid" disabled={isLoading}>
                     {isLoading ? <><div className="spinner"></div> Sending Secure Code...</> : 'Send Verification Code'}
                   </button>
@@ -273,7 +342,7 @@ export default function ClientLogin() {
               {/* MODE 3: CLIENT OTP VERIFICATION */}
               {loginMode === 'otp_verify' && (
                 <form onSubmit={handleOtpVerify}>
-                  <div className="success-msg">✓ Secure code dispatched to {username}</div>
+                  <div className="success-msg">✓ Secure code dispatched to the registered email for {usernameInput}</div>
                   <div className="input-group">
                     <label className="floating-label">Enter 6-Digit Code</label>
                     <input 
