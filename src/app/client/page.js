@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react'; // NEW: Added useRef
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable'; 
 import { supabase } from '../../lib/supabaseClient';
@@ -9,6 +9,10 @@ export default function ClientDashboard() {
   const [isMounted, setIsMounted] = useState(false);
   const [username, setUsername] = useState('');
   const [currentView, setCurrentView] = useState('dashboard'); 
+  
+  // NEW: Ref to track current view for the Back button interceptor
+  const currentViewRef = useRef(currentView);
+  useEffect(() => { currentViewRef.current = currentView; }, [currentView]);
   
   // App & Data State
   const [transactions, setTransactions] = useState([]);
@@ -19,6 +23,7 @@ export default function ClientDashboard() {
   const [txFilter, setTxFilter] = useState('All');
 
   // Transfer State
+  const [transferType, setTransferType] = useState('external'); 
   const [transferAmount, setTransferAmount] = useState(''); 
   const [formattedAmount, setFormattedAmount] = useState(''); 
   const [transferDesc, setTransferDesc] = useState('');
@@ -26,15 +31,17 @@ export default function ClientDashboard() {
   const [recipientAccount, setRecipientAccount] = useState(''); 
   const [routingNumber, setRoutingNumber] = useState(''); 
   const [fromAccount, setFromAccount] = useState('Main');
+  const [toAccount, setToAccount] = useState('Vault'); 
   const [successMsg, setSuccessMsg] = useState('');
   const [isTransferring, setIsTransferring] = useState(false);
   
-  // NEW: State to hold the injected database balance
-  const [baseBalance, setBaseBalance] = useState(250000.00);
+  // Database Balances
+  const [baseBalance, setBaseBalance] = useState(0.00);
+  const [baseSavingsBalance, setBaseSavingsBalance] = useState(0.00);
 
-  // Baselines
-  const initialMain = baseBalance; // NOW WIRED TO DATABASE
-  const initialVault = 1500000.00;
+  // Baselines connected to state
+  const initialMain = baseBalance; 
+  const initialVault = baseSavingsBalance; 
   
   const mockLoginHistory = [
     { id: 1, date: new Date().toLocaleString(), device: navigator.userAgent?.includes('Mac') ? 'Mac OS - Safari' : 'Windows - Chrome', location: 'Current Session' },
@@ -48,7 +55,7 @@ export default function ClientDashboard() {
     
     const currentUser = sessionStorage.getItem('current_user') || 'Member';
     const displayName = sessionStorage.getItem('display_name') || currentUser.split('@')[0];
-    setUsername(displayName); // Use the real name for the visual UI
+    setUsername(displayName); 
     
     const now = new Date();
     setLastLoginTime(`${now.toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}, ${now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`);
@@ -66,18 +73,17 @@ export default function ClientDashboard() {
 
   const fetchCloudTransactions = async (user) => {
     simulateNetworkLatency(async () => {
-      // NEW: Fetch the injected balance from the profiles table
       const { data: profile } = await supabase
         .from('profiles')
-        .select('account_balance')
+        .select('account_balance, savings_balance')
         .eq('email', user)
         .single();
         
-      if (profile && profile.account_balance !== null) {
-        setBaseBalance(profile.account_balance);
+      if (profile) {
+        if (profile.account_balance !== null) setBaseBalance(profile.account_balance);
+        if (profile.savings_balance !== null) setBaseSavingsBalance(profile.savings_balance);
       }
 
-      // EXISTING: Fetch the transactions
       const { data, error } = await supabase
         .from('transactions')
         .select('*')
@@ -130,30 +136,55 @@ export default function ClientDashboard() {
       return;
     }
 
-    const newTx = {
-      type: 'Debit',
-      desc: transferDesc || `Wire: ${recipientName} (••••${recipientAccount.slice(-4)})`,
-      amount: amountVal,
-      status: 'pending',
-      account: fromAccount,
-      user_id: username,
-      date: new Date().toISOString().split('T')[0]
-    };
+    if (transferType === 'internal') {
+      if (fromAccount === toAccount) {
+        setSuccessMsg('❌ ERROR: Please select different accounts.');
+        setIsTransferring(false); return;
+      }
 
-    await new Promise(resolve => setTimeout(resolve, 1500)); 
+      const today = new Date().toISOString().split('T')[0];
+      const debitTx = { type: 'Debit', desc: `Transfer to ${toAccount === 'Main' ? 'Checking' : 'Savings'}`, amount: amountVal, status: 'approved', account: fromAccount, user_id: username, date: today };
+      const creditTx = { type: 'Credit', desc: `Transfer from ${fromAccount === 'Main' ? 'Checking' : 'Savings'}`, amount: amountVal, status: 'approved', account: toAccount, user_id: username, date: today };
 
-    const { error } = await supabase.from('transactions').insert([newTx]);
+      await new Promise(resolve => setTimeout(resolve, 1000)); 
+      const { error } = await supabase.from('transactions').insert([debitTx, creditTx]);
 
-    if (!error) {
-      const { data } = await supabase.from('transactions').select('*').eq('user_id', username).order('id', { ascending: false });
-      if (data) setTransactions(data);
-      
-      setTransferAmount(''); setFormattedAmount(''); setTransferDesc(''); setRecipientAccount(''); setRoutingNumber(''); setRecipientName('');
-      setSuccessMsg('✓ Transfer Initiated. Waiting for network clearing.'); 
-      setTimeout(() => { setActiveModal(null); setSuccessMsg(''); }, 3000);
+      if (!error) {
+        const { data } = await supabase.from('transactions').select('*').eq('user_id', username).order('id', { ascending: false });
+        if (data) setTransactions(data);
+        
+        setTransferAmount(''); setFormattedAmount('');
+        setSuccessMsg('✓ Transfer Complete.'); 
+        setTimeout(() => { setActiveModal(null); setSuccessMsg(''); }, 2000);
+      } else {
+        setSuccessMsg('❌ ERROR: Secure connection failed.');
+      }
     } else {
-      setSuccessMsg('❌ ERROR: Secure connection failed.');
+      const newTx = {
+        type: 'Debit',
+        desc: transferDesc || `Wire: ${recipientName} (••••${recipientAccount.slice(-4)})`,
+        amount: amountVal,
+        status: 'pending',
+        account: fromAccount,
+        user_id: username,
+        date: new Date().toISOString().split('T')[0]
+      };
+
+      await new Promise(resolve => setTimeout(resolve, 1500)); 
+      const { error } = await supabase.from('transactions').insert([newTx]);
+
+      if (!error) {
+        const { data } = await supabase.from('transactions').select('*').eq('user_id', username).order('id', { ascending: false });
+        if (data) setTransactions(data);
+        
+        setTransferAmount(''); setFormattedAmount(''); setTransferDesc(''); setRecipientAccount(''); setRoutingNumber(''); setRecipientName('');
+        setSuccessMsg('✓ Transfer Initiated. Waiting for network clearing.'); 
+        setTimeout(() => { setActiveModal(null); setSuccessMsg(''); }, 3000);
+      } else {
+        setSuccessMsg('❌ ERROR: Secure connection failed.');
+      }
     }
+    
     setIsTransferring(false);
   };
 
@@ -187,7 +218,56 @@ export default function ClientDashboard() {
     return t.status.toLowerCase() === txFilter.toLowerCase();
   });
 
-  // --- THE FULLY RESPONSIVE CSS PATCH ---
+  // --- NEW: BACK BUTTON INTERCEPTOR ---
+  useEffect(() => {
+    const handleBackButton = (e) => {
+      e.preventDefault();
+      if (currentViewRef.current !== 'dashboard') {
+        // If they are deep in the app, return them to the dashboard and trap them
+        setCurrentView('dashboard');
+        window.history.pushState(null, '', window.location.href);
+      } else {
+        // If they are on the dashboard and hit back, prompt them
+        if (window.confirm("Are you sure you want to securely log out?")) {
+          handleLogout();
+        } else {
+          window.history.pushState(null, '', window.location.href);
+        }
+      }
+    };
+
+    // Push an initial state to the browser history so we have something to intercept
+    window.history.pushState(null, '', window.location.href);
+    window.addEventListener('popstate', handleBackButton);
+
+    return () => window.removeEventListener('popstate', handleBackButton);
+  }, []);
+
+  // --- NEW: 5-MINUTE INACTIVITY TIMEOUT ---
+  useEffect(() => {
+    let inactivityTimer;
+
+    const resetTimer = () => {
+      clearTimeout(inactivityTimer);
+      // Set to 5 minutes (300,000 milliseconds)
+      inactivityTimer = setTimeout(() => {
+        alert("For your security, your session has expired due to 5 minutes of inactivity.");
+        handleLogout();
+      }, 300000); 
+    };
+
+    resetTimer(); // Start timer on load
+
+    // Listen for any sign of life from the user
+    const activityEvents = ['mousemove', 'keydown', 'scroll', 'click', 'touchstart'];
+    activityEvents.forEach(event => window.addEventListener(event, resetTimer));
+
+    return () => {
+      clearTimeout(inactivityTimer);
+      activityEvents.forEach(event => window.removeEventListener(event, resetTimer));
+    };
+  }, []);
+
   const styles = `
     :root {
       --brand-blue: #0c2074;
@@ -320,6 +400,11 @@ export default function ClientDashboard() {
     .modal-content { background: white; width: 100%; max-width: 500px; border-radius: 12px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25); max-height: 90vh; overflow-y: auto; position: relative; margin: 0 auto; }
     .modal-header { padding: 20px 24px; border-bottom: 1px solid var(--border-light); display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; background: white; z-index: 10; }
     .modal-header h2 { margin: 0; font-size: 18px; color: var(--text-main); }
+    
+    .modal-toggle { display: flex; gap: 8px; margin-bottom: 24px; background: #f4f5f7; padding: 4px; border-radius: 8px; }
+    .modal-toggle-btn { flex: 1; padding: 10px; border: none; border-radius: 4px; font-size: 14px; cursor: pointer; transition: all 0.2s; }
+    .modal-toggle-btn.active { background: white; font-weight: 600; color: #1f2937; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    .modal-toggle-btn.inactive { background: transparent; color: #6b7280; font-weight: 500; }
 
     .toast { position: fixed; bottom: 100px; left: 50%; transform: translateX(-50%); background: #1f2937; color: white; padding: 16px 24px; border-radius: 8px; font-weight: 500; font-size: 14px; z-index: 9999; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.2); white-space: nowrap; max-width: 90vw; }
 
@@ -376,7 +461,7 @@ export default function ClientDashboard() {
       
       {systemAlert && <div className="toast">ℹ️ {systemAlert}</div>}
 
-      {/* TRANSFER MODAL */}
+      {/* ENHANCED TRANSFER MODAL */}
       {activeModal === 'transfer' && (
         <div className="modal-overlay">
           <div className="modal-content">
@@ -385,42 +470,65 @@ export default function ClientDashboard() {
               <button onClick={() => setActiveModal(null)} style={{ background: 'none', border: 'none', fontSize: '24px', cursor: 'pointer', color: '#6b7280' }}>×</button>
             </div>
             <div style={{ padding: '24px' }}>
+              
+              <div className="modal-toggle">
+                <button type="button" className={`modal-toggle-btn ${transferType === 'external' ? 'active' : 'inactive'}`} onClick={() => setTransferType('external')}>Send to someone</button>
+                <button type="button" className={`modal-toggle-btn ${transferType === 'internal' ? 'active' : 'inactive'}`} onClick={() => setTransferType('internal')}>Between my accounts</button>
+              </div>
+
               {successMsg && <div style={{ padding: '12px', marginBottom: '20px', borderRadius: '4px', backgroundColor: successMsg.includes('❌') ? '#fee2e2' : '#e6ffed', color: successMsg.includes('❌') ? '#991b1b' : '#166534', fontSize: '14px', fontWeight: '500' }}>{successMsg}</div>}
               
               <form onSubmit={handleTransferSubmit}>
                 <div className="input-group">
                   <label className="input-label">Transfer from</label>
-                  <select className="input-field" value={fromAccount} onChange={(e) => setFromAccount(e.target.value)}>
-                    <option value="Main">Checking ...8842 - ${mainBalance.toLocaleString()}</option>
-                    <option value="Vault">Savings ...1195 - ${vaultBalance.toLocaleString()}</option>
+                  <select className="input-field" value={fromAccount} onChange={(e) => { 
+                    setFromAccount(e.target.value); 
+                    if (transferType === 'internal' && e.target.value === toAccount) setToAccount(e.target.value === 'Main' ? 'Vault' : 'Main');
+                  }}>
+                    <option value="Main">Checking ...8842 - ${mainBalance.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</option>
+                    <option value="Vault">Savings ...1195 - ${vaultBalance.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</option>
                   </select>
                 </div>
                 
-                <div className="input-group">
-                  <label className="input-label">Recipient Name</label>
-                  <input type="text" required className="input-field" value={recipientName} onChange={(e) => setRecipientName(e.target.value)} />
-                </div>
+                {transferType === 'internal' ? (
+                  <div className="input-group">
+                    <label className="input-label">Transfer to</label>
+                    <select className="input-field" value={toAccount} onChange={(e) => setToAccount(e.target.value)}>
+                      <option value="Main" disabled={fromAccount === 'Main'}>Checking ...8842</option>
+                      <option value="Vault" disabled={fromAccount === 'Vault'}>Savings ...1195</option>
+                    </select>
+                  </div>
+                ) : (
+                  <>
+                    <div className="input-group">
+                      <label className="input-label">Recipient Name</label>
+                      <input type="text" required className="input-field" value={recipientName} onChange={(e) => setRecipientName(e.target.value)} />
+                    </div>
 
-                <div className="form-grid" style={{ marginBottom: '20px', gap: '16px' }}>
-                  <div className="input-group" style={{ marginBottom: 0 }}>
-                    <label className="input-label">Routing #</label>
-                    <input type="text" maxLength={11} required className="input-field" value={routingNumber} onChange={(e) => handleNumericInput(e, setRoutingNumber)} />
-                  </div>
-                  <div className="input-group" style={{ marginBottom: 0 }}>
-                    <label className="input-label">Account #</label>
-                    <input type="text" maxLength={17} required className="input-field" value={recipientAccount} onChange={(e) => handleNumericInput(e, setRecipientAccount)} />
-                  </div>
-                </div>
+                    <div className="form-grid" style={{ marginBottom: '20px', gap: '16px' }}>
+                      <div className="input-group" style={{ marginBottom: 0 }}>
+                        <label className="input-label">Routing #</label>
+                        <input type="text" maxLength={11} required className="input-field" value={routingNumber} onChange={(e) => handleNumericInput(e, setRoutingNumber)} />
+                      </div>
+                      <div className="input-group" style={{ marginBottom: 0 }}>
+                        <label className="input-label">Account #</label>
+                        <input type="text" maxLength={17} required className="input-field" value={recipientAccount} onChange={(e) => handleNumericInput(e, setRecipientAccount)} />
+                      </div>
+                    </div>
+                  </>
+                )}
 
                 <div className="input-group">
                   <label className="input-label">Amount</label>
                   <input type="text" required className="input-field" value={formattedAmount} onChange={handleAmountChange} placeholder="$ 0.00" />
                 </div>
                 
-                <div className="input-group">
-                  <label className="input-label">Memo (Optional)</label>
-                  <input type="text" className="input-field" value={transferDesc} onChange={(e) => setTransferDesc(e.target.value)} />
-                </div>
+                {transferType === 'external' && (
+                  <div className="input-group">
+                    <label className="input-label">Memo (Optional)</label>
+                    <input type="text" className="input-field" value={transferDesc} onChange={(e) => setTransferDesc(e.target.value)} />
+                  </div>
+                )}
 
                 <div style={{ display: 'flex', gap: '12px', marginTop: '32px', flexWrap: 'wrap' }}>
                   <button type="button" onClick={() => setActiveModal(null)} className="btn-blue-outline" style={{ flex: 1, padding: '14px', minWidth: '120px' }}>Cancel</button>
@@ -536,7 +644,7 @@ export default function ClientDashboard() {
                     </div>
                   </div>
                   <div style={{ width: '100%' }}>
-                    <button className="btn-blue-outline" style={{ width: '100%', maxWidth: '200px' }} onClick={(e) => { e.stopPropagation(); setActiveModal('transfer'); }}>Make a transfer ›</button>
+                    <button className="btn-blue-outline" style={{ width: '100%', maxWidth: '200px' }} onClick={(e) => { e.stopPropagation(); setTransferType('external'); setFromAccount('Main'); setActiveModal('transfer'); }}>Make a transfer ›</button>
                   </div>
                 </div>
 
@@ -554,7 +662,7 @@ export default function ClientDashboard() {
                     </div>
                   </div>
                   <div style={{ width: '100%' }}>
-                    <button className="btn-blue-outline" style={{ width: '100%', maxWidth: '200px' }} onClick={(e) => { e.stopPropagation(); setActiveModal('transfer'); }}>Make a transfer ›</button>
+                    <button className="btn-blue-outline" style={{ width: '100%', maxWidth: '200px' }} onClick={(e) => { e.stopPropagation(); setTransferType('internal'); setFromAccount('Vault'); setToAccount('Main'); setActiveModal('transfer'); }}>Make a transfer ›</button>
                   </div>
                 </div>
 
