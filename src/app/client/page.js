@@ -28,9 +28,12 @@ export default function ClientDashboard() {
   const [fromAccount, setFromAccount] = useState('Main');
   const [successMsg, setSuccessMsg] = useState('');
   const [isTransferring, setIsTransferring] = useState(false);
+  
+  // NEW: State to hold the injected database balance
+  const [baseBalance, setBaseBalance] = useState(250000.00);
 
   // Baselines
-  const initialMain = 250000.00;
+  const initialMain = baseBalance; // NOW WIRED TO DATABASE
   const initialVault = 1500000.00;
   
   const mockLoginHistory = [
@@ -63,6 +66,18 @@ export default function ClientDashboard() {
 
   const fetchCloudTransactions = async (user) => {
     simulateNetworkLatency(async () => {
+      // NEW: Fetch the injected balance from the profiles table
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('account_balance')
+        .eq('email', user)
+        .single();
+        
+      if (profile && profile.account_balance !== null) {
+        setBaseBalance(profile.account_balance);
+      }
+
+      // EXISTING: Fetch the transactions
       const { data, error } = await supabase
         .from('transactions')
         .select('*')
