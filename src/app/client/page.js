@@ -66,7 +66,7 @@ export default function ClientDashboard() {
     
     setUsername(displayName); 
     setUserEmail(currentUser); 
-    setProfileEmail(currentUser); // Populate the profile input with their actual registered email
+    setProfileEmail(currentUser); 
     
     const now = new Date();
     setLastLoginTime(`${now.toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}, ${now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`);
@@ -132,19 +132,20 @@ export default function ClientDashboard() {
     setFormattedAmount(numericValue ? number.toLocaleString('en-US') : ''); 
   };
 
-  // --- PROFILE UPDATE HANDLERS ---
+  // --- UPGRADED PROFILE SECURITY HANDLERS ---
   const handleSaveChanges = () => {
-    // Check if the user altered the email field
     if (profileEmail !== userEmail) {
       const code = Math.floor(10000000 + Math.random() * 90000000).toString(); 
       setUpdateOtp(code);
       setPendingEmail(profileEmail);
       
-      // Simulate sending the email with a popup
-      alert(`[SYSTEM MESSAGE] An 8-digit verification code has been sent to ${profileEmail}.\n\nYour code is: ${code}`);
+      // Send the code to the hidden developer console for testing purposes
+      console.log(`[MOCK EMAIL SERVER] To: ${userEmail} | Subject: Security Verification | Body: Your 8-digit code is: ${code}`);
+
+      // Alert the user WITHOUT revealing the code
+      alert(`[SECURITY ALERT] You are attempting to change your email address.\n\nAn 8-digit verification code has been securely sent to your currently registered email: ${userEmail}\n\nPlease check your inbox to proceed.`);
       setShowOtpModal(true);
     } else {
-      // If email is untouched, simulate saving the phone number (ignored by database)
       setSystemAlert('Profile details saved successfully.');
       setTimeout(() => setSystemAlert(''), 3000);
     }
@@ -152,14 +153,12 @@ export default function ClientDashboard() {
 
   const handleVerifyUpdate = async () => {
     if (enteredOtp === updateOtp) {
-      // Success - Update Database
       const { error } = await supabase
         .from('profiles')
         .update({ email: pendingEmail })
         .eq('email', userEmail);
         
       if (!error) {
-        // Automatically migrate their transaction history so it matches their new email
         await supabase.from('transactions').update({ user_id: pendingEmail }).eq('user_id', userEmail);
 
         setUserEmail(pendingEmail);
@@ -357,7 +356,7 @@ export default function ClientDashboard() {
     /* Mobile Header */
     .mobile-header { display: none; background: var(--hero-blue); color: white; padding: 20px 20px 0 20px; width: 100%; }
     .mobile-top-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; width: 100%; }
-    .mobile-search { flex: 1; background: rgba(255,255,255,0.2); border-radius: 20px; padding: 8px 16px; display: flex; align-items: center; }
+    .mobile-search { flex: 1; background: rgba(255,255,255,0.2); border-radius: 20px; padding: 8px 16px; display: flex; align-items: center; margin: 0; }
     .mobile-search input { background: transparent; border: none; color: white; width: 100%; outline: none; }
     .mobile-search input::placeholder { color: rgba(255,255,255,0.8); }
     
@@ -517,7 +516,7 @@ export default function ClientDashboard() {
             </div>
             <div style={{ padding: '24px' }}>
               <p style={{ fontSize: '14px', color: '#4b5563', marginBottom: '24px' }}>
-                We sent a verification code to your email. Please enter it below to confirm your profile update.
+                We sent a verification code to your currently registered email (<b>{userEmail}</b>). Please enter it below to authorize changing your email to {pendingEmail}.
               </p>
               <div className="input-group">
                 <label className="input-label">8-Digit Security Code</label>
@@ -826,6 +825,10 @@ export default function ClientDashboard() {
                 <div className="input-group">
                   <label className="input-label">Legal Name</label>
                   <input type="text" className="input-field" value={username} disabled />
+                </div>
+                <div className="input-group">
+                  <label className="input-label">Gender</label>
+                  <input type="text" className="input-field" value="Not specified on file" disabled />
                 </div>
                 <div className="input-group" style={{ gridColumn: '1 / -1' }}>
                   <label className="input-label">Physical Address</label>
