@@ -44,6 +44,7 @@ export default function ManagerDashboard() {
   };
 
   const fetchDashboardData = async () => {
+    // 1. Fetch Master Ledger
     const { data: txData, error: txError } = await supabase
       .from('transactions')
       .select('*')
@@ -52,6 +53,7 @@ export default function ManagerDashboard() {
     if (txData) setTransactions(txData);
     if (txError) console.error("Error fetching tx:", txError);
 
+    // 2. Fetch Client Roster
     const { data: clientData, error: clientError } = await supabase
       .from('profiles')
       .select('*')
@@ -62,8 +64,21 @@ export default function ManagerDashboard() {
     if (clientError) console.error("Error fetching clients:", clientError);
   };
 
-  // --- UPGRADED: CUSTOM DESCRIPTIONS & BUG FIX ---
-  const handleInjectBalance = async (email, currentBalance, clientName, targetAccount) => {
+  // TRUE LEDGER MATH: Calculates client balances live based ONLY on approved transactions
+  const getClientBalance = (email, targetAccount) => {
+    let balance = 0;
+    transactions.forEach(t => {
+      // Must match the exact user email, the target account, and be approved
+      if (t.user_id === email && (t.account || 'Main') === targetAccount && t.status === 'approved') {
+        if (t.type === 'Credit') balance += Number(t.amount);
+        if (t.type === 'Debit') balance -= Number(t.amount);
+      }
+    });
+    return balance;
+  };
+
+  // --- UPGRADED: STRICT LEDGER INJECTION ---
+  const handleInjectBalance = async (email, clientName, targetAccount) => {
     const accountName = targetAccount === 'Main' ? 'Checking (...8842)' : 'Savings Vault (...1195)';
     
     // 1. Get the Amount
@@ -81,62 +96,39 @@ export default function ManagerDashboard() {
       return;
     }
 
-    // 2. NEW: Get the Description
+    // 2. Get the Description
     let customDesc = window.prompt(
       `Enter a description for this transaction that the client will see on their dashboard:`, 
       "System Admin Adjustment"
     );
 
-    if (customDesc === null) return; // If they click cancel on the description, abort.
+    if (customDesc === null) return; 
     if (customDesc.trim() === '') customDesc = "System Admin Adjustment";
 
-    // Calculate new total and determine if it's a Credit or Debit log
-    const currentTotal = Number(currentBalance || 0);
-    const newBalance = currentTotal + injectAmount;
+    // 3. Prep the Transaction
     const absAmount = Math.abs(injectAmount);
     const txType = injectAmount > 0 ? 'Credit' : 'Debit';
-    const balanceField = targetAccount === 'Main' ? 'account_balance' : 'savings_balance';
 
-    // Update the actual balance in the profiles table
-    const { error: profileError } = await supabase
-      .from('profiles')
-      .update({ [balanceField]: newBalance })
-      .eq('email', email);
-
-    if (profileError) {
-      alert(`Error updating balance: ${profileError.message}`);
-      return;
-    }
-
-    // Forge the official transaction log with the CUSTOM description
     const newTx = {
       type: txType,
       desc: customDesc,
       amount: absAmount,
-      status: 'approved',
+      status: 'approved', // Auto-approves so the balance updates instantly
       account: targetAccount,
-      user_id: email,
+      user_id: email, // Tied explicitly to their Email for the Identity crisis fix
       date: new Date().toISOString().split('T')[0]
     };
 
-    const { error: txError } = await supabase.from('transactions').insert([newTx]);
+    // 4. Push to Database
+    const { data, error } = await supabase.from('transactions').insert([newTx]).select();
 
-    if (!txError) {
-      // FIX: Force the UI to update the balance instantly without asking the DB for stale data
-      setClients(prevClients => prevClients.map(c => 
-        c.email === email ? { ...c, [balanceField]: newBalance } : c
-      ));
-
-      // Fetch ONLY the transactions to update the master ledger
-      const { data: txData } = await supabase
-        .from('transactions')
-        .select('*')
-        .order('id', { ascending: false });
-      if (txData) setTransactions(txData);
-
+    if (!error && data) {
+      // Instantly inject the new transaction into the UI state.
+      // Because we use "True Ledger Math", this single line automatically updates the Client balances in the table!
+      setTransactions([data[0], ...transactions]);
       alert(`SUCCESS! $${absAmount.toLocaleString('en-US', {minimumFractionDigits: 2})} was ${injectAmount > 0 ? 'added to' : 'deducted from'} ${clientName}'s ${accountName}.`);
     } else {
-      alert("Balance updated, but failed to log transaction history.");
+      alert("Failed to log transaction history. Secure connection error.");
     }
   };
 
@@ -147,6 +139,7 @@ export default function ManagerDashboard() {
       .eq('id', id);
       
     if (!error) {
+      // Update the transaction in state. If approved, the live balance math catches it instantly.
       setTransactions(transactions.map(t => t.id === id ? { ...t, status: newStatus } : t));
     }
   };
@@ -236,21 +229,21 @@ export default function ManagerDashboard() {
                       <td className="admin-td" style={{ fontWeight: 'bold', color: '#0f172a' }}>{client.full_name || 'N/A'}<br/><span style={{fontSize:'12px', fontWeight:'normal', color:'#64748b'}}>@{client.username}</span></td>
                       <td className="admin-td">{client.email}</td>
                       <td className="admin-td" style={{ fontWeight: 'bold', color: '#16a34a', fontSize: '15px' }}>
-                        ${Number(client.account_balance || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                        ${getClientBalance(client.email, 'Main').toLocaleString('en-US', { minimumFractionDigits: 2 })}
                       </td>
                       <td className="admin-td" style={{ fontWeight: 'bold', color: '#0c2074', fontSize: '15px' }}>
-                        ${Number(client.savings_balance || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                        ${getClientBalance(client.email, 'Vault').toLocaleString('en-US', { minimumFractionDigits: 2 })}
                       </td>
                       <td className="admin-td">
                         <div style={{ display: 'flex', gap: '4px' }}>
                           <button 
-                            onClick={() => handleInjectBalance(client.email, client.account_balance, client.full_name, 'Main')} 
+                            onClick={() => handleInjectBalance(client.email, client.full_name, 'Main')} 
                             className="btn-action btn-inject"
                           >
                             + CHK
                           </button>
                           <button 
-                            onClick={() => handleInjectBalance(client.email, client.savings_balance, client.full_name, 'Vault')} 
+                            onClick={() => handleInjectBalance(client.email, client.full_name, 'Vault')} 
                             className="btn-action btn-inject-sav"
                           >
                             + SAV

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react'; // NEW: Added useRef
+import { useState, useEffect, useRef } from 'react'; 
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable'; 
 import { supabase } from '../../lib/supabaseClient';
@@ -8,9 +8,9 @@ import { supabase } from '../../lib/supabaseClient';
 export default function ClientDashboard() {
   const [isMounted, setIsMounted] = useState(false);
   const [username, setUsername] = useState('');
+  const [userEmail, setUserEmail] = useState(''); 
   const [currentView, setCurrentView] = useState('dashboard'); 
   
-  // NEW: Ref to track current view for the Back button interceptor
   const currentViewRef = useRef(currentView);
   useEffect(() => { currentViewRef.current = currentView; }, [currentView]);
   
@@ -21,6 +21,14 @@ export default function ClientDashboard() {
   const [lastLoginTime, setLastLoginTime] = useState(''); 
   const [isProcessing, setIsProcessing] = useState(true); 
   const [txFilter, setTxFilter] = useState('All');
+
+  // Profile Update State
+  const [profileEmail, setProfileEmail] = useState('');
+  const [profilePhone, setProfilePhone] = useState('+1 (555) ***-**42');
+  const [showOtpModal, setShowOtpModal] = useState(false);
+  const [updateOtp, setUpdateOtp] = useState('');
+  const [enteredOtp, setEnteredOtp] = useState('');
+  const [pendingEmail, setPendingEmail] = useState('');
 
   // Transfer State
   const [transferType, setTransferType] = useState('external'); 
@@ -55,7 +63,10 @@ export default function ClientDashboard() {
     
     const currentUser = sessionStorage.getItem('current_user') || 'Member';
     const displayName = sessionStorage.getItem('display_name') || currentUser.split('@')[0];
+    
     setUsername(displayName); 
+    setUserEmail(currentUser); 
+    setProfileEmail(currentUser); // Populate the profile input with their actual registered email
     
     const now = new Date();
     setLastLoginTime(`${now.toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}, ${now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`);
@@ -121,6 +132,50 @@ export default function ClientDashboard() {
     setFormattedAmount(numericValue ? number.toLocaleString('en-US') : ''); 
   };
 
+  // --- PROFILE UPDATE HANDLERS ---
+  const handleSaveChanges = () => {
+    // Check if the user altered the email field
+    if (profileEmail !== userEmail) {
+      const code = Math.floor(10000000 + Math.random() * 90000000).toString(); 
+      setUpdateOtp(code);
+      setPendingEmail(profileEmail);
+      
+      // Simulate sending the email with a popup
+      alert(`[SYSTEM MESSAGE] An 8-digit verification code has been sent to ${profileEmail}.\n\nYour code is: ${code}`);
+      setShowOtpModal(true);
+    } else {
+      // If email is untouched, simulate saving the phone number (ignored by database)
+      setSystemAlert('Profile details saved successfully.');
+      setTimeout(() => setSystemAlert(''), 3000);
+    }
+  };
+
+  const handleVerifyUpdate = async () => {
+    if (enteredOtp === updateOtp) {
+      // Success - Update Database
+      const { error } = await supabase
+        .from('profiles')
+        .update({ email: pendingEmail })
+        .eq('email', userEmail);
+        
+      if (!error) {
+        // Automatically migrate their transaction history so it matches their new email
+        await supabase.from('transactions').update({ user_id: pendingEmail }).eq('user_id', userEmail);
+
+        setUserEmail(pendingEmail);
+        sessionStorage.setItem('current_user', pendingEmail);
+        setSystemAlert('Email address successfully verified and updated.');
+        setShowOtpModal(false);
+        setEnteredOtp('');
+        setTimeout(() => setSystemAlert(''), 3000);
+      } else {
+        alert('Database error during update. Secure connection failed.');
+      }
+    } else {
+      alert('Invalid security code. Please try again.');
+    }
+  };
+
   const handleTransferSubmit = async (e) => {
     e.preventDefault();
     setIsTransferring(true);
@@ -143,14 +198,14 @@ export default function ClientDashboard() {
       }
 
       const today = new Date().toISOString().split('T')[0];
-      const debitTx = { type: 'Debit', desc: `Transfer to ${toAccount === 'Main' ? 'Checking' : 'Savings'}`, amount: amountVal, status: 'approved', account: fromAccount, user_id: username, date: today };
-      const creditTx = { type: 'Credit', desc: `Transfer from ${fromAccount === 'Main' ? 'Checking' : 'Savings'}`, amount: amountVal, status: 'approved', account: toAccount, user_id: username, date: today };
+      const debitTx = { type: 'Debit', desc: `Transfer to ${toAccount === 'Main' ? 'Checking' : 'Savings'}`, amount: amountVal, status: 'approved', account: fromAccount, user_id: userEmail, date: today };
+      const creditTx = { type: 'Credit', desc: `Transfer from ${fromAccount === 'Main' ? 'Checking' : 'Savings'}`, amount: amountVal, status: 'approved', account: toAccount, user_id: userEmail, date: today };
 
       await new Promise(resolve => setTimeout(resolve, 1000)); 
       const { error } = await supabase.from('transactions').insert([debitTx, creditTx]);
 
       if (!error) {
-        const { data } = await supabase.from('transactions').select('*').eq('user_id', username).order('id', { ascending: false });
+        const { data } = await supabase.from('transactions').select('*').eq('user_id', userEmail).order('id', { ascending: false });
         if (data) setTransactions(data);
         
         setTransferAmount(''); setFormattedAmount('');
@@ -166,7 +221,7 @@ export default function ClientDashboard() {
         amount: amountVal,
         status: 'pending',
         account: fromAccount,
-        user_id: username,
+        user_id: userEmail,
         date: new Date().toISOString().split('T')[0]
       };
 
@@ -174,7 +229,7 @@ export default function ClientDashboard() {
       const { error } = await supabase.from('transactions').insert([newTx]);
 
       if (!error) {
-        const { data } = await supabase.from('transactions').select('*').eq('user_id', username).order('id', { ascending: false });
+        const { data } = await supabase.from('transactions').select('*').eq('user_id', userEmail).order('id', { ascending: false });
         if (data) setTransactions(data);
         
         setTransferAmount(''); setFormattedAmount(''); setTransferDesc(''); setRecipientAccount(''); setRoutingNumber(''); setRecipientName('');
@@ -218,16 +273,13 @@ export default function ClientDashboard() {
     return t.status.toLowerCase() === txFilter.toLowerCase();
   });
 
-  // --- NEW: BACK BUTTON INTERCEPTOR ---
   useEffect(() => {
     const handleBackButton = (e) => {
       e.preventDefault();
       if (currentViewRef.current !== 'dashboard') {
-        // If they are deep in the app, return them to the dashboard and trap them
         setCurrentView('dashboard');
         window.history.pushState(null, '', window.location.href);
       } else {
-        // If they are on the dashboard and hit back, prompt them
         if (window.confirm("Are you sure you want to securely log out?")) {
           handleLogout();
         } else {
@@ -236,29 +288,25 @@ export default function ClientDashboard() {
       }
     };
 
-    // Push an initial state to the browser history so we have something to intercept
     window.history.pushState(null, '', window.location.href);
     window.addEventListener('popstate', handleBackButton);
 
     return () => window.removeEventListener('popstate', handleBackButton);
   }, []);
 
-  // --- NEW: 5-MINUTE INACTIVITY TIMEOUT ---
   useEffect(() => {
     let inactivityTimer;
 
     const resetTimer = () => {
       clearTimeout(inactivityTimer);
-      // Set to 5 minutes (300,000 milliseconds)
       inactivityTimer = setTimeout(() => {
         alert("For your security, your session has expired due to 5 minutes of inactivity.");
         handleLogout();
       }, 300000); 
     };
 
-    resetTimer(); // Start timer on load
+    resetTimer(); 
 
-    // Listen for any sign of life from the user
     const activityEvents = ['mousemove', 'keydown', 'scroll', 'click', 'touchstart'];
     activityEvents.forEach(event => window.addEventListener(event, resetTimer));
 
@@ -309,8 +357,7 @@ export default function ClientDashboard() {
     /* Mobile Header */
     .mobile-header { display: none; background: var(--hero-blue); color: white; padding: 20px 20px 0 20px; width: 100%; }
     .mobile-top-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; width: 100%; }
-    .hamburger { font-size: 24px; cursor: pointer; }
-    .mobile-search { flex: 1; margin: 0 16px; background: rgba(255,255,255,0.2); border-radius: 20px; padding: 8px 16px; display: flex; align-items: center; }
+    .mobile-search { flex: 1; background: rgba(255,255,255,0.2); border-radius: 20px; padding: 8px 16px; display: flex; align-items: center; }
     .mobile-search input { background: transparent; border: none; color: white; width: 100%; outline: none; }
     .mobile-search input::placeholder { color: rgba(255,255,255,0.8); }
     
@@ -431,7 +478,6 @@ export default function ClientDashboard() {
     }
     
     @media (max-width: 850px) {
-      /* Complete switch to Mobile App Layout */
       .desktop-header, .desktop-hero-container, .action-row { display: none; }
       .mobile-header, .bottom-nav { display: flex; }
       .mobile-header { flex-direction: column; }
@@ -460,6 +506,33 @@ export default function ClientDashboard() {
       )}
       
       {systemAlert && <div className="toast">ℹ️ {systemAlert}</div>}
+
+      {/* --- OTP VERIFICATION MODAL --- */}
+      {showOtpModal && (
+        <div className="modal-overlay">
+          <div className="modal-content">
+            <div className="modal-header">
+              <h2>Security Verification</h2>
+              <button onClick={() => setShowOtpModal(false)} style={{ background: 'none', border: 'none', fontSize: '24px', cursor: 'pointer', color: '#6b7280' }}>×</button>
+            </div>
+            <div style={{ padding: '24px' }}>
+              <p style={{ fontSize: '14px', color: '#4b5563', marginBottom: '24px' }}>
+                We sent a verification code to your email. Please enter it below to confirm your profile update.
+              </p>
+              <div className="input-group">
+                <label className="input-label">8-Digit Security Code</label>
+                <input type="text" className="input-field" value={enteredOtp} onChange={(e) => setEnteredOtp(e.target.value)} placeholder="Enter code" />
+              </div>
+              <div style={{ display: 'flex', gap: '12px', marginTop: '32px', flexWrap: 'wrap' }}>
+                <button type="button" onClick={() => setShowOtpModal(false)} className="btn-blue-outline" style={{ flex: 1, padding: '14px', minWidth: '120px' }}>Cancel</button>
+                <button type="button" onClick={handleVerifyUpdate} className="btn-blue-solid" style={{ flex: 1, padding: '14px', minWidth: '150px' }}>
+                  Verify & Update
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ENHANCED TRANSFER MODAL */}
       {activeModal === 'transfer' && (
@@ -552,16 +625,16 @@ export default function ClientDashboard() {
           </div>
           <div className="top-actions">
             <span onClick={() => triggerMockFeature('Notifications')}>Notifications <b style={{ color: '#e31837' }}>1</b></span>
-            <span onClick={() => changeView('profile')}>Profile & settings ⌄</span>
-            <span onClick={() => triggerMockFeature('Help')}>Need help? ⌄</span>
+            <span onClick={() => changeView('profile')}>Profile & settings</span>
+            <span onClick={() => triggerMockFeature('Help')}>Need help?</span>
             <span onClick={handleLogout}>Log out</span>
           </div>
         </div>
         <div className="main-nav">
           <div className="nav-container">
             <div className={`nav-tab ${currentView === 'dashboard' ? 'active' : ''}`} onClick={() => changeView('dashboard')}>Dashboard</div>
-            <div className={`nav-tab ${currentView === 'transactions' ? 'active' : ''}`} onClick={() => changeView('transactions')}>Accounts</div>
-            <div className="nav-tab" onClick={() => setActiveModal('transfer')}>Transfer & pay ⌄</div>
+            <div className={`nav-tab ${currentView === 'transactions' ? 'active' : ''}`} onClick={() => changeView('transactions')}>Activity</div>
+            <div className="nav-tab" onClick={() => setActiveModal('transfer')}>Transfer & pay</div>
             <div className={`nav-tab ${currentView === 'security' ? 'active' : ''}`} onClick={() => changeView('security')}>Security & limits</div>
             <div className="nav-tab" onClick={() => generatePDFStatement()}>Products & offers</div>
           </div>
@@ -571,8 +644,7 @@ export default function ClientDashboard() {
       {/* --- MOBILE HEADER --- */}
       <div className="mobile-header">
         <div className="mobile-top-row">
-          <span className="hamburger" onClick={() => triggerMockFeature('Menu')}>☰</span>
-          <div className="mobile-search">
+          <div className="mobile-search" style={{ margin: 0 }}>
             <span>🔍</span>
             <input type="text" placeholder="Smart Assistant" />
             <span>🎤</span>
@@ -697,7 +769,7 @@ export default function ClientDashboard() {
           </div>
         )}
 
-        {/* VIEW: TRANSACTIONS */}
+        {/* VIEW: TRANSACTIONS (Activity) */}
         {currentView === 'transactions' && (
           <div className="us-card">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '16px' }}>
@@ -755,24 +827,20 @@ export default function ClientDashboard() {
                   <label className="input-label">Legal Name</label>
                   <input type="text" className="input-field" value={username} disabled />
                 </div>
-                <div className="input-group">
-                  <label className="input-label">Date of Birth</label>
-                  <input type="text" className="input-field" value="XX/XX/1975" disabled />
-                </div>
                 <div className="input-group" style={{ gridColumn: '1 / -1' }}>
                   <label className="input-label">Physical Address</label>
                   <input type="text" className="input-field" value="Restricted via KYC Compliance" disabled />
                 </div>
                 <div className="input-group">
                   <label className="input-label">Email Address</label>
-                  <input type="email" className="input-field" defaultValue={`${username.toLowerCase().replace(/\s/g, '')}@securemail.com`} />
+                  <input type="email" className="input-field" value={profileEmail} onChange={(e) => setProfileEmail(e.target.value)} />
                 </div>
                 <div className="input-group">
                   <label className="input-label">Mobile Phone</label>
-                  <input type="tel" className="input-field" defaultValue="+1 (555) ***-**42" />
+                  <input type="tel" className="input-field" value={profilePhone} onChange={(e) => setProfilePhone(e.target.value)} />
                 </div>
               </div>
-              <button className="btn-blue-solid" style={{ width: '100%', maxWidth: '200px' }} onClick={() => triggerMockFeature('Update Profile')}>Save changes</button>
+              <button className="btn-blue-solid" style={{ width: '100%', maxWidth: '200px' }} onClick={handleSaveChanges}>Save changes</button>
             </div>
 
             <div className="us-card">
@@ -860,7 +928,7 @@ export default function ClientDashboard() {
       <div className="bottom-nav">
         <div className={`b-nav-item ${currentView === 'dashboard' ? 'active' : ''}`} onClick={() => changeView('dashboard')}>
           <span className="b-nav-icon">⌂</span>
-          <span>Accounts</span>
+          <span>Activity</span>
         </div>
         <div className={`b-nav-item ${currentView === 'transactions' ? 'active' : ''}`} onClick={() => changeView('transactions')}>
           <span className="b-nav-icon">⇄</span>
