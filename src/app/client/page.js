@@ -5,9 +5,10 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable'; 
 import { supabase } from '../../lib/supabaseClient';
 
-const BrandLogo = ({ size = 44 }) => (
+// Updated BrandLogo to accept dynamic colors for mobile vs desktop
+const BrandLogo = ({ size = 36, textColor = "#001e79" }) => (
   <svg xmlns="http://www.w3.org/2000/svg" height={size} viewBox="0 0 1551 431">
-    <g fill="#001e79">
+    <g fill={textColor}>
       <g fillRule="evenodd">
         <path d="M1538.1 269.5c2.3 1 4.5 2.4 6.3 4.2s3.2 3.9 4.2 6.3 1.5 4.9 1.5 7.5c0 7.8-4.7 14.9-12 18-7.3 3-15.7 1.4-21.3-4.2-5.5-5.6-7.2-13.9-4.2-21.2s10.1-12 18-12c2.5-.1 5.1.4 7.5 1.4m-7.5 34.8c2.2 0 4.4-.4 6.5-1.3s3.9-2.1 5.5-3.7 2.8-3.5 3.6-5.6 1.2-4.3 1.1-6.5c0-6.9-4.1-13-10.4-15.6s-13.6-1.1-18.4 3.7-6.2 12.1-3.6 18.4c2.7 6.3 8.9 10.3 15.7 10.3zM579 0h66v106l3.3-3.6c1.7-2 5.7-5.3 8.7-7.3s9.1-5.2 13.5-7 12.4-4.2 17.8-5.2c5.3-1.1 14.1-1.9 19.4-1.9 5.4 0 13.7.7 18.6 1.5 4.8.8 12.4 2.8 16.9 4.3 4.6 1.5 11.7 4.8 15.8 7.2s10.1 6.6 13.3 9.2c3.1 2.6 8.5 8.3 11.8 12.6 3.4 4.2 7.6 10.4 9.5 13.7 1.8 3.3 4.5 8.9 6 12.5 1.4 3.6 3.7 10.8 5 16s3.1 16 4 24c1.4 13.2 1.4 15.6 0 27-.9 6.9-2.4 15.9-3.5 20-1 4.1-3.3 11.1-5.1 15.5-1.7 4.4-4.9 10.9-7 14.5-2 3.6-6.6 10.1-10.1 14.4-3.5 4.4-9.5 10.5-13.4 13.6-3.9 3-10.4 7.4-14.5 9.7s-11.5 5.5-16.5 7.1-12.6 3.5-17 4.2c-5.2.9-12.4 1.1-20.5.7-6.9-.3-15.2-1.3-18.5-2.2s-9.4-3.2-13.5-5.1-9.8-5.2-12.5-7.4c-2.8-2.1-6.7-6-12.6-13.5l.1 23.5h-65zm102 143.1c-3 .6-8.2 2.5-11.4 4.3-3.3 1.7-8.2 5.4-11 8.2s-6.6 8-8.3 11.5c-1.8 3.5-3.9 9.6-4.8 13.4-.8 3.9-1.5 10.4-1.5 14.5s.7 10.7 1.5 14.5c.8 3.9 2.8 9.7 4.3 13 1.6 3.3 5.1 8.5 7.9 11.5 2.7 3 7.7 6.9 10.9 8.7 3.2 1.7 8.6 3.9 11.9 4.7 3.3.9 9.1 1.6 13 1.6s9.7-.7 13-1.6c3.3-.8 8.6-3 11.9-4.7 3.2-1.8 7.8-5.2 10.1-7.7s5.6-7.3 7.3-10.7c1.8-3.5 3.9-9.1 4.7-12.5.8-3.5 1.5-11 1.5-16.8 0-6.3-.6-12.9-1.5-16.5-.9-3.3-2.7-8.5-4.1-11.5-1.5-3-5-8-7.9-11s-7.9-6.9-11.1-8.7c-3.3-1.7-7.7-3.6-9.9-4.1-2.2-.6-6.7-1.2-10-1.5-3.3-.2-7.1-.3-8.5-.1s-5 .9-8 1.5M921 79.1c3.6-.1 11.7.6 18 1.4s15.1 2.4 19.5 3.5 12.5 4.2 18 6.9c7.3 3.6 12 6.7 17.4 11.8 4 3.7 9 9.3 11 12.3s5.1 8.9 6.8 13 3.9 10.9 4.9 15c1.5 6.6 1.8 16.9 2.4 82 .4 41 1 75.7 2 80h-30c-27.7 0-30-.1-30.6-1.7-.3-1-.8-6-1.2-11.1-.4-5-.8-9.2-.9-9.2s-3.7 3.5-8 7.8c-5.1 5.1-10.2 9-14.8 11.4-3.9 2-11.4 4.8-16.7 6.2-7.8 2.1-12.1 2.6-21 2.6-7.2 0-14.4-.7-19.8-1.9-4.7-1-11.9-3.3-16-5s-10.6-5.5-14.4-8.4c-3.8-2.8-9-7.7-11.4-10.7-2.5-3-6.2-9.1-8.3-13.5-2-4.4-4.2-10.7-4.8-14s-1.1-9.6-1.1-14c0-4.5.8-11.2 1.9-15.5 1-4.1 2.8-9.3 3.9-11.5s3.8-6.5 6.1-9.5 6.7-7.7 9.9-10.3c3.1-2.7 9.7-6.8 14.7-9.2s12.8-5.3 17.5-6.4 20.6-3.9 35.5-6.2 29.2-4.9 32-5.8c3.6-1.2 5.6-2.6 7.3-5.1 1.6-2.6 2.2-4.8 2.1-8.4-.1-2.8-1.1-6.7-2.5-9.5-1.3-2.5-3.7-5.6-5.4-6.8-1.6-1.3-5.1-3.1-7.7-4.2-2.7-1-8.6-2.1-13.3-2.5-6.3-.5-9.8-.3-13.5.8-2.7.8-7.5 3-10.5 4.8-4 2.4-6.7 5.1-9.8 9.8-2.4 3.6-4.5 8.1-4.8 10s-.8 4.1-1.2 4.8c-.6 1.1-6.4.2-28.7-4.4-15.4-3.1-28.5-6.1-29-6.5-.7-.6-.4-3.6.9-8.7 1.1-4.2 3.9-11.8 6.4-16.7 3.8-7.6 6.1-10.6 14.6-19 6.9-6.8 12.5-11.3 17.6-14.2 4.1-2.3 12.2-5.8 18-7.7s15-4.2 20.5-4.9c5.5-.8 12.9-1.5 16.5-1.6m-20.9 140.7c-3.4 1.7-6.5 4.3-8.5 7.1-2.4 3.3-3.2 5.6-3.5 10-.1 3.1.3 7.6 1 10.1.8 2.7 2.9 6 5.1 8.2 2.6 2.6 5.6 4.3 9.6 5.4 4 1.2 8 1.5 13.2 1.2 4.1-.3 10-1.5 13-2.6 3-1.2 7.3-3.5 9.5-5.2s5.3-5 6.8-7.3 3.6-6.9 4.6-10.2c1.1-3.4 2.1-10.5 2.3-16.3l.5-10.2c-5.6.2-16.4 1.7-27.7 3.6-15.9 2.6-21.7 4-25.9 6.2"/>
       </g>
@@ -318,6 +319,14 @@ export default function ClientDashboard() {
     setIsTransferring(false);
   };
 
+  const generatePDFStatement = () => {
+    const doc = new jsPDF();
+    doc.text("Global Vault - Official Statement", 14, 22);
+    const tableRows = transactions.map(t => [t.date, t.desc, t.account || 'Main', t.status.toUpperCase(), `${t.type === 'Credit' ? '+' : '-'}$${Number(t.amount).toLocaleString()}`]);
+    autoTable(doc, { startY: 30, head: [["Date", "Description", "Account", "Status", "Amount"]], body: tableRows, theme: 'grid' });
+    doc.save(`Activity_Statement.pdf`);
+  };
+
   const handleLogout = () => {
     sessionStorage.removeItem('client_authenticated'); 
     sessionStorage.removeItem('current_user');
@@ -339,27 +348,6 @@ export default function ClientDashboard() {
     if (txFilter === 'All') return true;
     return t.status.toLowerCase() === txFilter.toLowerCase();
   });
-
-  useEffect(() => {
-    const handleBackButton = (e) => {
-      e.preventDefault();
-      if (currentViewRef.current !== 'dashboard') {
-        setCurrentView('dashboard');
-        window.history.pushState(null, '', window.location.href);
-      } else {
-        if (window.confirm("Are you sure you want to securely log out?")) {
-          handleLogout();
-        } else {
-          window.history.pushState(null, '', window.location.href);
-        }
-      }
-    };
-
-    window.history.pushState(null, '', window.location.href);
-    window.addEventListener('popstate', handleBackButton);
-
-    return () => window.removeEventListener('popstate', handleBackButton);
-  }, []);
 
   useEffect(() => {
     let inactivityTimer;
@@ -421,7 +409,8 @@ export default function ClientDashboard() {
 
     /* Mobile Header */
     .mobile-header { display: none; background: var(--hero-blue); color: white; padding: 20px 20px 0 20px; width: 100%; }
-    .mobile-top-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; width: 100%; gap: 16px; }
+    /* Fix: Add top padding/margin to nudge mobile logo down slightly */
+    .mobile-top-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; width: 100%; gap: 16px; padding-top: 8px; }
     .mobile-search { background: rgba(255,255,255,0.2); border-radius: 20px; padding: 8px 16px; display: flex; align-items: center; margin-bottom: 24px; width: 100%; }
     .mobile-search input { background: transparent; border: none; color: white; width: 100%; outline: none; margin: 0 8px; }
     .mobile-search input::placeholder { color: rgba(255,255,255,0.8); }
@@ -453,8 +442,8 @@ export default function ClientDashboard() {
     .main-container { max-width: 1400px; margin: 0 auto; padding: 16px 40px 80px 40px; width: 100%; }
     
     /* Action Row - DESKTOP ONLY SPACING ENFORCED */
-    .action-row { display: flex; justify-content: flex-start; gap: 12px !important; margin: 24px 0 32px 0; flex-wrap: wrap; align-items: center; }
-    .action-row button, .action-row a { margin: 0; }
+    .action-row { display: flex !important; justify-content: flex-start !important; gap: 12px !important; margin: 24px 0 32px 0 !important; flex-wrap: wrap !important; align-items: center !important; }
+    .action-row button, .action-row a { margin: 0 !important; }
     
     .btn-blue-outline { background: white; color: var(--hero-blue); border: 1px solid var(--hero-blue); padding: 10px 24px; border-radius: 20px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s; white-space: nowrap; display: inline-block; }
     .btn-blue-outline:hover { background: var(--hero-blue); color: white; }
@@ -478,7 +467,7 @@ export default function ClientDashboard() {
     .acc-icon-box { width: 48px; height: 32px; background: linear-gradient(135deg, #0c2074, #0045a5); border-radius: 4px; position: relative; overflow: hidden; border: 1px solid rgba(0,0,0,0.1); flex-shrink: 0; }
     .acc-icon-box::after { content: 'Visa'; position: absolute; bottom: 2px; right: 4px; color: white; font-size: 8px; font-weight: bold; font-style: italic; }
     .acc-icon-box.red { background: linear-gradient(135deg, #e31837, #b01028); }
-    .acc-icon-box.red::after { content: 'Visa'; }
+    .acc-icon-box.red::after { content: 'Vault'; }
     
     .acc-name { font-size: 16px; font-weight: 700; color: var(--text-main); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
     .acc-number { font-size: 16px; color: var(--text-muted); font-weight: 400; }
@@ -565,6 +554,7 @@ export default function ClientDashboard() {
     }
     
     @media (max-width: 850px) {
+      /* ENFORCING DISPLAY NONE WITH !IMPORTANT TO PREVENT DOUBLE RENDERING */
       .show-desktop, .desktop-header, .desktop-hero-container, .action-row { display: none !important; }
       .show-mobile { display: block; }
       .mobile-header, .bottom-nav { display: flex; }
@@ -841,7 +831,7 @@ export default function ClientDashboard() {
       <div className="desktop-header show-desktop">
         <div className="top-utility-bar">
           <div className="brand-logo" style={{ display: 'flex', alignItems: 'center' }}>
-            <BrandLogo size={36} />
+            <BrandLogo size={36} textColor="#001e79" />
           </div>
           <div className="search-bar">
             <span style={{ color: '#0045a5' }}>🔍</span>
@@ -871,7 +861,7 @@ export default function ClientDashboard() {
       <div className="mobile-header show-mobile">
         <div className="mobile-top-row">
           <div className="brand-logo" style={{ display: 'flex', alignItems: 'center' }}>
-            <BrandLogo size={36} />
+            <BrandLogo size={36} textColor="#ffffff" />
           </div>
           <button className="mobile-bell-btn" onClick={() => setActiveModal('notifications')}>
             🔔
@@ -918,7 +908,7 @@ export default function ClientDashboard() {
       <div className="main-container">
         
         {currentView === 'dashboard' && (
-          <div className="action-row show-desktop" style={{ gap: '12px' }}>
+          <div className="action-row show-desktop">
             <button className="btn-blue-solid" onClick={() => handleSecureAction(() => setActiveModal('transfer'))}>Zelle® ›</button>
             <button className="btn-blue-solid" onClick={() => handleSecureAction(() => triggerMockFeature('Bill Pay'))}>Pay bills ›</button>
             <button className="btn-blue-outline" onClick={() => generatePDFStatement()}>View statements</button>
@@ -945,7 +935,7 @@ export default function ClientDashboard() {
                       <div className="acc-icon-box"></div>
                       <div>
                         <div className="acc-name">Checking <span className="acc-number">...8842</span></div>
-                        <div style={{ fontSize: '12px', color: '#6b7280', marginTop: '4px' }}>U.S Bank</div>
+                        <div style={{ fontSize: '12px', color: '#6b7280', marginTop: '4px' }}>U.S. Bank</div>
                       </div>
                     </div>
                     <div className="acc-right">
@@ -963,7 +953,7 @@ export default function ClientDashboard() {
                       <div className="acc-icon-box red"></div>
                       <div>
                         <div className="acc-name">Savings Vault <span className="acc-number">...1195</span></div>
-                        <div style={{ fontSize: '12px', color: '#6b7280', marginTop: '4px' }}>U.S Bank</div>
+                        <div style={{ fontSize: '12px', color: '#6b7280', marginTop: '4px' }}>U.S. Bank</div>
                       </div>
                     </div>
                     <div className="acc-right">
