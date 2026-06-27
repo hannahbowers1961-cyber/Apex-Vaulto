@@ -159,17 +159,39 @@ export default function ManagerDashboard() {
     .manager-main { width: 100%; max-width: 1200px; margin: 0 auto; padding: 32px 16px; display: flex; flex-direction: column; gap: 32px; }
     .admin-card { background-color: white; border: 1px solid #cbd5e1; border-radius: 4px; width: 100%; overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
     .admin-card-header { background-color: #f8fafc; padding: 16px 20px; border-bottom: 1px solid #cbd5e1; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
+    
     .table-container { overflow-x: auto; width: 100%; -webkit-overflow-scrolling: touch; padding: 0; }
     .admin-table { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 700px; }
     .admin-th { background-color: #f1f5f9; padding: 14px 16px; text-align: left; font-weight: bold; color: #475569; border-bottom: 2px solid #cbd5e1; }
     .admin-td { padding: 14px 16px; border-bottom: 1px solid #e2e8f0; color: #1e293b; }
+    
     .btn-action { padding: 6px 12px; font-size: 12px; font-weight: bold; border: none; border-radius: 4px; cursor: pointer; transition: opacity 0.2s; margin-right: 8px; }
     .btn-approve { background-color: #16a34a; color: white; }
     .btn-reject { background-color: #dc2626; color: white; }
     .btn-inject { background-color: #2563eb; color: white; margin-right: 4px; }
     .btn-inject-sav { background-color: #0c2074; color: white; }
     .btn-approve:hover, .btn-reject:hover, .btn-inject:hover, .btn-inject-sav:hover { opacity: 0.8; }
-    @media (max-width: 768px) { .manager-header { padding: 12px 16px; flex-direction: column; align-items: flex-start; } .manager-main { padding: 16px; } h1 { font-size: 20px !important; } }
+
+    /* Responsive Setup */
+    .show-desktop { display: block; }
+    .show-mobile { display: none; }
+
+    .mobile-list { display: flex; flex-direction: column; }
+    .mobile-card { border-bottom: 1px solid #cbd5e1; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+    .mobile-card:last-child { border-bottom: none; }
+    .m-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+    .m-col { display: flex; flex-direction: column; gap: 4px; }
+
+    @media (max-width: 850px) { 
+      .manager-header { padding: 12px 16px; flex-direction: column; align-items: flex-start; } 
+      .manager-main { padding: 16px; } 
+      h1 { font-size: 20px !important; } 
+      
+      .show-desktop { display: none !important; }
+      .show-mobile { display: block !important; }
+      
+      .btn-action { padding: 10px 12px; font-size: 13px; } /* Slightly larger touch targets on mobile */
+    }
   `;
 
   if (!isMounted || isCheckingAuth) {
@@ -211,7 +233,9 @@ export default function ManagerDashboard() {
             <div className="admin-card-header">
               <h2 style={{ margin: 0, fontSize: '18px', color: '#0f172a', fontWeight: 'bold' }}>Client Account Controls</h2>
             </div>
-            <div className="table-container">
+            
+            {/* DESKTOP VIEW - CLIENTS */}
+            <div className="table-container show-desktop">
               <table className="admin-table">
                 <thead>
                   <tr>
@@ -255,6 +279,37 @@ export default function ManagerDashboard() {
                 </tbody>
               </table>
             </div>
+
+            {/* MOBILE VIEW - CLIENTS */}
+            <div className="show-mobile">
+              <div className="mobile-list">
+                {clients.length === 0 && (<div style={{ padding: '32px', textAlign: 'center', color: '#64748b' }}>No active clients found.</div>)}
+                {clients.map((client) => (
+                  <div className="mobile-card" key={`mob-${client.id}`}>
+                    <div className="m-row">
+                      <div className="m-col">
+                        <strong style={{ color: '#0f172a', fontSize: '16px' }}>{client.full_name || 'N/A'}</strong>
+                        <span style={{ fontSize: '13px', color: '#64748b' }}>{client.email}</span>
+                      </div>
+                    </div>
+                    <div className="m-row" style={{ backgroundColor: '#f8fafc', padding: '12px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
+                      <div className="m-col">
+                        <span style={{ fontSize: '12px', color: '#64748b', textTransform: 'uppercase', fontWeight: 'bold' }}>Checking</span>
+                        <strong style={{ color: '#16a34a', fontSize: '16px' }}>${getClientBalance(client.email, 'Main').toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong>
+                      </div>
+                      <div className="m-col" style={{ alignItems: 'flex-end' }}>
+                        <span style={{ fontSize: '12px', color: '#64748b', textTransform: 'uppercase', fontWeight: 'bold' }}>Savings</span>
+                        <strong style={{ color: '#0c2074', fontSize: '16px' }}>${getClientBalance(client.email, 'Vault').toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong>
+                      </div>
+                    </div>
+                    <div className="m-row" style={{ marginTop: '4px' }}>
+                      <button onClick={() => handleInjectBalance(client.email, client.full_name, 'Main')} className="btn-action btn-inject" style={{ flex: 1, margin: 0 }}>+ CHK</button>
+                      <button onClick={() => handleInjectBalance(client.email, client.full_name, 'Vault')} className="btn-action btn-inject-sav" style={{ flex: 1, margin: 0 }}>+ SAV</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
 
           {/* --- MASTER TRANSACTION LEDGER --- */}
@@ -263,7 +318,9 @@ export default function ManagerDashboard() {
               <h2 style={{ margin: 0, fontSize: '18px', color: '#0f172a', fontWeight: 'bold' }}>Master Transaction Ledger</h2>
               <button onClick={clearHistory} style={{ backgroundColor: 'transparent', border: '1px solid #dc2626', color: '#dc2626', padding: '6px 12px', fontSize: '12px', fontWeight: 'bold', borderRadius: '4px', cursor: 'pointer' }}>⚠ WIPE DATABASE</button>
             </div>
-            <div className="table-container">
+            
+            {/* DESKTOP VIEW - TRANSACTIONS */}
+            <div className="table-container show-desktop">
               <table className="admin-table">
                 <thead>
                   <tr>
@@ -282,7 +339,7 @@ export default function ManagerDashboard() {
                       <td className="admin-td" style={{ fontWeight: 'bold', color: '#0f172a' }}>{t.user_id}</td>
                       <td className="admin-td"><strong>{t.date}</strong><br/><span style={{ fontSize: '12px', color: '#64748b' }}>Acc: {t.account}</span></td>
                       <td className="admin-td" style={{ fontWeight: 'bold' }}>{t.desc}</td>
-                      <td className="admin-td" style={{ fontWeight: 'bold', color: t.type === 'Credit' ? '#16a34a' : '#0f172a' }}>{t.type === 'Credit' ? '+' : '-'}${Number(t.amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+                      <td className="admin-td" style={{ fontWeight: 'bold', color: t.type === 'Credit' ? '#16a34a' : '#dc2626' }}>{t.type === 'Credit' ? '+' : '-'}${Number(t.amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
                       <td className="admin-td">
                         <span style={{ padding: '4px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: 'bold', textTransform: 'uppercase', backgroundColor: t.status === 'approved' ? '#dcfce7' : t.status === 'rejected' ? '#fee2e2' : '#fef08a', color: t.status === 'approved' ? '#166534' : t.status === 'rejected' ? '#991b1b' : '#854d0e' }}>{t.status}</span>
                       </td>
@@ -298,6 +355,36 @@ export default function ManagerDashboard() {
                   ))}
                 </tbody>
               </table>
+            </div>
+
+            {/* MOBILE VIEW - TRANSACTIONS */}
+            <div className="show-mobile">
+              <div className="mobile-list">
+                {transactions.length === 0 && (<div style={{ padding: '32px', textAlign: 'center', color: '#64748b' }}>No transactions recorded.</div>)}
+                {transactions.map((t) => (
+                  <div className="mobile-card" key={`mob-tx-${t.id}`} style={{ backgroundColor: t.status === 'pending' ? '#fefce8' : 'transparent' }}>
+                    <div className="m-row">
+                      <div className="m-col" style={{ flex: 1, paddingRight: '8px' }}>
+                        <span style={{ fontSize: '11px', color: '#64748b', textTransform: 'uppercase', fontWeight: 'bold' }}>{t.user_id}</span>
+                        <strong style={{ color: '#0f172a', fontSize: '15px', wordBreak: 'break-word' }}>{t.desc}</strong>
+                      </div>
+                      <strong style={{ color: t.type === 'Credit' ? '#16a34a' : '#dc2626', fontSize: '16px', whiteSpace: 'nowrap' }}>
+                        {t.type === 'Credit' ? '+' : '-'}${Number(t.amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                      </strong>
+                    </div>
+                    <div className="m-row" style={{ alignItems: 'center' }}>
+                      <span style={{ fontSize: '13px', color: '#64748b' }}>{t.date} • {t.account}</span>
+                      <span style={{ padding: '4px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: 'bold', textTransform: 'uppercase', backgroundColor: t.status === 'approved' ? '#dcfce7' : t.status === 'rejected' ? '#fee2e2' : '#fef08a', color: t.status === 'approved' ? '#166534' : t.status === 'rejected' ? '#991b1b' : '#854d0e' }}>{t.status}</span>
+                    </div>
+                    {t.status === 'pending' && (
+                      <div className="m-row" style={{ marginTop: '8px' }}>
+                        <button onClick={() => updateStatus(t.id, 'approved')} className="btn-action btn-approve" style={{ flex: 1, margin: 0 }}>APPROVE</button>
+                        <button onClick={() => updateStatus(t.id, 'rejected')} className="btn-action btn-reject" style={{ flex: 1, margin: 0 }}>REJECT</button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </main>

@@ -11,6 +11,9 @@ export default function ClientDashboard() {
   const [userEmail, setUserEmail] = useState(''); 
   const [currentView, setCurrentView] = useState('dashboard'); 
   
+  // --- COMPLIANCE LOCK ---
+  const [isRestricted, setIsRestricted] = useState(true); 
+
   const currentViewRef = useRef(currentView);
   useEffect(() => { currentViewRef.current = currentView; }, [currentView]);
   
@@ -24,7 +27,7 @@ export default function ClientDashboard() {
 
   // Profile Update State
   const [profileEmail, setProfileEmail] = useState('');
-  const [profilePhone, setProfilePhone] = useState('+1 (919) ***-**42'); // UPDATED AREA CODE
+  const [profilePhone, setProfilePhone] = useState('+1 (919) ***-**42'); 
   const [showOtpModal, setShowOtpModal] = useState(false);
   const [updateOtp, setUpdateOtp] = useState('');
   const [enteredOtp, setEnteredOtp] = useState('');
@@ -86,19 +89,21 @@ export default function ClientDashboard() {
     simulateNetworkLatency(async () => {
       const { data: profile } = await supabase
         .from('profiles')
-        .select('account_balance, savings_balance')
+        .select('account_balance, savings_balance, full_name')
         .eq('email', user)
         .single();
         
       if (profile) {
         if (profile.account_balance !== null) setBaseBalance(profile.account_balance);
         if (profile.savings_balance !== null) setBaseSavingsBalance(profile.savings_balance);
+        if (profile.full_name) setUsername(profile.full_name);
       }
 
       const { data, error } = await supabase
         .from('transactions')
         .select('*')
         .eq('user_id', user)
+        .order('date', { ascending: false })
         .order('id', { ascending: false });
       if (data) setTransactions(data);
     });
@@ -132,17 +137,23 @@ export default function ClientDashboard() {
     setFormattedAmount(numericValue ? number.toLocaleString('en-US') : ''); 
   };
 
-  // --- UPGRADED PROFILE SECURITY HANDLERS ---
+  // --- COMPLIANCE INTERCEPTOR ---
+  const handleSecureAction = (actionCallback) => {
+    if (isRestricted) {
+      setActiveModal('restricted');
+    } else {
+      actionCallback();
+    }
+  };
+
   const handleSaveChanges = () => {
     if (profileEmail !== userEmail) {
       const code = Math.floor(10000000 + Math.random() * 90000000).toString(); 
       setUpdateOtp(code);
       setPendingEmail(profileEmail);
       
-      // Send the code to the hidden developer console for testing purposes
       console.log(`[MOCK EMAIL SERVER] To: ${userEmail} | Subject: Security Verification | Body: Your 8-digit code is: ${code}`);
 
-      // Alert the user WITHOUT revealing the code
       alert(`[SECURITY ALERT] You are attempting to change your email address.\n\nAn 8-digit verification code has been securely sent to your currently registered email: ${userEmail}\n\nPlease check your inbox to proceed.`);
       setShowOtpModal(true);
     } else {
@@ -204,7 +215,7 @@ export default function ClientDashboard() {
       const { error } = await supabase.from('transactions').insert([debitTx, creditTx]);
 
       if (!error) {
-        const { data } = await supabase.from('transactions').select('*').eq('user_id', userEmail).order('id', { ascending: false });
+        const { data } = await supabase.from('transactions').select('*').eq('user_id', userEmail).order('date', { ascending: false }).order('id', { ascending: false });
         if (data) setTransactions(data);
         
         setTransferAmount(''); setFormattedAmount('');
@@ -228,7 +239,7 @@ export default function ClientDashboard() {
       const { error } = await supabase.from('transactions').insert([newTx]);
 
       if (!error) {
-        const { data } = await supabase.from('transactions').select('*').eq('user_id', userEmail).order('id', { ascending: false });
+        const { data } = await supabase.from('transactions').select('*').eq('user_id', userEmail).order('date', { ascending: false }).order('id', { ascending: false });
         if (data) setTransactions(data);
         
         setTransferAmount(''); setFormattedAmount(''); setTransferDesc(''); setRecipientAccount(''); setRoutingNumber(''); setRecipientName('');
@@ -331,7 +342,7 @@ export default function ClientDashboard() {
     
     .loader-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(255,255,255,0.8); z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; backdrop-filter: blur(4px); }
     .spinner { border: 4px solid var(--border-light); border-top: 4px solid var(--brand-red); border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin-bottom: 16px; }
-    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    @keyframes spin { 0deg { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     
     /* Desktop Header */
     .desktop-header { background: white; border-bottom: 1px solid var(--border-light); width: 100%; }
@@ -355,37 +366,43 @@ export default function ClientDashboard() {
 
     /* Mobile Header */
     .mobile-header { display: none; background: var(--hero-blue); color: white; padding: 20px 20px 0 20px; width: 100%; }
-    .mobile-top-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; width: 100%; }
+    .mobile-top-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; width: 100%; gap: 16px; }
     .mobile-search { flex: 1; background: rgba(255,255,255,0.2); border-radius: 20px; padding: 8px 16px; display: flex; align-items: center; margin: 0; }
     .mobile-search input { background: transparent; border: none; color: white; width: 100%; outline: none; }
     .mobile-search input::placeholder { color: rgba(255,255,255,0.8); }
     
+    /* Modern Header Bell Style */
+    .mobile-bell-btn { background: none; border: none; color: white; font-size: 22px; cursor: pointer; padding: 4px; position: relative; display: flex; align-items: center; justify-content: center; }
+    .mobile-bell-badge { position: absolute; top: 2px; right: 2px; width: 8px; height: 8px; background-color: var(--brand-red); border-radius: 50%; border: 1px solid var(--hero-blue); }
+
     .mobile-greeting { font-size: 24px; font-weight: 700; margin-bottom: 16px; letter-spacing: -0.5px; word-break: break-word; }
     
     .mobile-pills { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 20px; scrollbar-width: none; -ms-overflow-style: none; }
     .mobile-pills::-webkit-scrollbar { display: none; }
     .pill { background: white; color: var(--hero-blue); padding: 8px 16px; border-radius: 20px; font-size: 13px; font-weight: 600; white-space: nowrap; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
 
-    /* Desktop Hero */
-    .desktop-hero-container { max-width: 1400px; margin: 0 auto; padding: 32px 40px 0 40px; width: 100%; }
-    .desktop-hero { background: var(--hero-blue); border-radius: 12px; padding: 40px; color: white; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 10px 25px -5px rgba(0,69,165,0.3); flex-wrap: wrap; gap: 32px; }
+    /* Desktop Hero - HEIGHT & PADDING REDUCED */
+    .desktop-hero-container { max-width: 1400px; margin: 0 auto; padding: 16px 40px 0 40px; width: 100%; }
+    .desktop-hero { background: var(--hero-blue); border-radius: 12px; padding: 24px 40px; color: white; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 10px 25px -5px rgba(0,69,165,0.3); flex-wrap: wrap; gap: 24px; }
     .hero-text { flex: 1; min-width: 250px; }
-    .hero-text h1 { margin: 0 0 8px 0; font-size: 36px; font-weight: 700; letter-spacing: -1px; word-break: break-word; }
+    .hero-text h1 { margin: 0 0 4px 0; font-size: 32px; font-weight: 700; letter-spacing: -1px; word-break: break-word; }
     .hero-text p { margin: 0; font-size: 16px; color: rgba(255,255,255,0.9); }
     
-    /* Responsive Promo Card */
-    .promo-card { background: white; color: var(--text-main); padding: 24px; border-radius: 8px; width: 100%; max-width: 350px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); flex-shrink: 0; }
-    .promo-card h3 { margin: 0 0 8px 0; font-size: 16px; color: var(--text-main); }
-    .promo-card p { margin: 0 0 16px 0; font-size: 13px; color: var(--text-muted); line-height: 1.4; }
+    /* Responsive Promo Card - HEIGHT REDUCED */
+    .promo-card { background: white; color: var(--text-main); padding: 16px 24px; border-radius: 8px; width: 100%; max-width: 350px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); flex-shrink: 0; }
+    .promo-card h3 { margin: 0 0 4px 0; font-size: 16px; color: var(--text-main); }
+    .promo-card p { margin: 0 0 12px 0; font-size: 13px; color: var(--text-muted); line-height: 1.4; }
     .btn-red { background: var(--brand-red); color: white; border: none; padding: 8px 16px; border-radius: 20px; font-size: 13px; font-weight: 600; cursor: pointer; }
 
     /* Layout */
-    .main-container { max-width: 1400px; margin: 0 auto; padding: 24px 40px 80px 40px; width: 100%; }
+    .main-container { max-width: 1400px; margin: 0 auto; padding: 16px 40px 80px 40px; width: 100%; }
     
-    .action-row { display: flex; justify-content: flex-end; gap: 12px; margin-bottom: 24px; flex-wrap: wrap; }
-    .btn-blue-outline { background: white; color: var(--hero-blue); border: 1px solid var(--hero-blue); padding: 8px 16px; border-radius: 20px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s; white-space: nowrap; }
+    /* Action Row - BUTTON SPACING MASSIVELY INCREASED */
+    .action-row { display: flex; justify-content: flex-start; gap: 32px; margin-bottom: 32px; flex-wrap: wrap; align-items: center; }
+    
+    .btn-blue-outline { background: white; color: var(--hero-blue); border: 1px solid var(--hero-blue); padding: 10px 24px; border-radius: 20px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s; white-space: nowrap; }
     .btn-blue-outline:hover { background: var(--hero-blue); color: white; }
-    .btn-blue-solid { background: var(--hero-blue); color: white; border: 1px solid var(--hero-blue); padding: 8px 16px; border-radius: 20px; font-size: 14px; font-weight: 600; cursor: pointer; transition: background 0.2s; white-space: nowrap; }
+    .btn-blue-solid { background: var(--hero-blue); color: white; border: 1px solid var(--hero-blue); padding: 10px 24px; border-radius: 20px; font-size: 14px; font-weight: 600; cursor: pointer; transition: background 0.2s; white-space: nowrap; }
     .btn-blue-solid:hover { background: var(--brand-blue); }
 
     .dashboard-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 24px; }
@@ -421,7 +438,7 @@ export default function ClientDashboard() {
     .val-in { color: #166534; }
     .val-out { color: var(--text-main); }
     
-    /* Transactions */
+    /* Transactions - Desktop Table */
     .filter-pills { display: flex; gap: 12px; margin-bottom: 24px; flex-wrap: wrap; }
     .f-pill { background: white; border: 1px solid var(--border-light); padding: 8px 16px; border-radius: 20px; font-size: 14px; font-weight: 500; cursor: pointer; color: var(--text-muted); transition: all 0.2s; white-space: nowrap; }
     .f-pill.active { background: var(--hero-blue); color: white; border-color: var(--hero-blue); }
@@ -432,6 +449,15 @@ export default function ClientDashboard() {
     .tx-table td { padding: 16px; border-bottom: 1px solid var(--border-light); font-size: 14px; }
     .tx-desc { font-weight: 600; color: var(--text-main); min-width: 150px; }
     .status-badge { font-size: 12px; padding: 4px 8px; border-radius: 4px; font-weight: 600; background: var(--bg-gray); white-space: nowrap; }
+
+    /* Transactions - Mobile Stacked Cards */
+    .mobile-tx-list { display: flex; flex-direction: column; }
+    .m-tx-card { border-bottom: 1px solid var(--border-light); padding: 16px 0; display: flex; flex-direction: column; gap: 8px; }
+    .m-tx-card:last-child { border-bottom: none; }
+    .m-tx-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+    .m-tx-desc { font-weight: 600; color: var(--text-main); font-size: 15px; line-height: 1.3; word-break: break-word; }
+    .m-tx-amount { font-weight: 700; font-size: 16px; white-space: nowrap; flex-shrink: 0; }
+    .m-tx-date { font-size: 13px; color: var(--text-muted); }
 
     /* Forms */
     .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
@@ -467,8 +493,8 @@ export default function ClientDashboard() {
     @media (max-width: 1024px) {
       .top-utility-bar { padding: 16px 24px; }
       .main-nav { padding: 0 24px; }
-      .desktop-hero-container { padding: 32px 24px 0 24px; }
-      .main-container { padding: 24px 24px 80px 24px; }
+      .desktop-hero-container { padding: 16px 24px 0 24px; }
+      .main-container { padding: 16px 24px 80px 24px; }
     }
 
     @media (max-width: 900px) {
@@ -508,6 +534,64 @@ export default function ClientDashboard() {
       )}
       
       {systemAlert && <div className="toast">ℹ️ {systemAlert}</div>}
+
+      {/* --- COMPLIANCE RESTRICTION MODAL --- */}
+      {activeModal === 'restricted' && (
+        <div className="modal-overlay">
+          <div className="modal-content" style={{ maxWidth: '400px', textAlign: 'center', padding: '32px 24px' }}>
+            <div style={{ width: '64px', height: '64px', backgroundColor: '#fee2e2', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px auto' }}>
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#dc2626" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+            </div>
+            <h2 style={{ fontSize: '24px', color: '#1f2937', margin: '0 0 12px 0', letterSpacing: '-0.5px' }}>Account Restricted</h2>
+            <p style={{ fontSize: '15px', color: '#4b5563', lineHeight: '1.5', margin: '0 0 32px 0' }}>
+              For your security, your account has been temporarily restricted. To restore full functionality, including transfers and bill pay, please visit a local branch in person with a valid government-issued ID.
+            </p>
+            <button className="btn-blue-solid" style={{ width: '100%', marginBottom: '12px' }} onClick={() => { setActiveModal(null); triggerMockFeature('Branch Locator'); }}>Find a branch</button>
+            <button className="btn-blue-outline" style={{ width: '100%' }} onClick={() => setActiveModal(null)}>Dismiss</button>
+          </div>
+        </div>
+      )}
+
+      {/* --- NOTIFICATIONS LIST MODAL --- */}
+      {activeModal === 'notifications' && (
+        <div className="modal-overlay">
+          <div className="modal-content" style={{ maxWidth: '480px', backgroundColor: '#f8fafc' }}>
+            <div className="modal-header" style={{ backgroundColor: 'white' }}>
+              <h2>Notifications</h2>
+              <button onClick={() => setActiveModal(null)} style={{ background: 'none', border: 'none', fontSize: '24px', cursor: 'pointer', color: '#6b7280' }}>×</button>
+            </div>
+            <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              
+              {isRestricted && (
+                <div style={{ backgroundColor: '#fef2f2', border: '1px solid #fca5a5', borderRadius: '8px', padding: '16px', display: 'flex', gap: '16px', alignItems: 'flex-start' }}>
+                  <div style={{ color: '#dc2626', marginTop: '2px', fontSize: '20px' }}>⚠</div>
+                  <div>
+                    <div style={{ fontWeight: '700', color: '#991b1b', fontSize: '15px', marginBottom: '4px' }}>Account Restricted</div>
+                    <div style={{ fontSize: '13px', color: '#7f1d1d', lineHeight: '1.5' }}>Action required. Please visit a branch in person to verify your identity and restore access to transfers and bill pay.</div>
+                  </div>
+                </div>
+              )}
+              
+              <div style={{ backgroundColor: 'white', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '16px', display: 'flex', gap: '16px', alignItems: 'flex-start' }}>
+                <div style={{ color: '#2563eb', marginTop: '2px', fontSize: '20px' }}>📄</div>
+                <div>
+                  <div style={{ fontWeight: '600', color: '#1e293b', fontSize: '15px', marginBottom: '4px' }}>Monthly Statement Ready</div>
+                  <div style={{ fontSize: '13px', color: '#64748b', lineHeight: '1.5' }}>Your account statement for the previous month is now available to view or download.</div>
+                </div>
+              </div>
+
+              <div style={{ backgroundColor: 'white', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '16px', display: 'flex', gap: '16px', alignItems: 'flex-start' }}>
+                <div style={{ color: '#16a34a', marginTop: '2px', fontSize: '20px' }}>🔒</div>
+                <div>
+                  <div style={{ fontWeight: '600', color: '#1e293b', fontSize: '15px', marginBottom: '4px' }}>New Login Detected</div>
+                  <div style={{ fontSize: '13px', color: '#64748b', lineHeight: '1.5' }}>A secure login was detected from a new device. If this was you, no action is needed.</div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* --- OTP VERIFICATION MODAL --- */}
       {showOtpModal && (
@@ -626,7 +710,9 @@ export default function ClientDashboard() {
             <input type="text" placeholder="G.V. Smart Assistant" />
           </div>
           <div className="top-actions">
-            <span onClick={() => triggerMockFeature('Notifications')}>Notifications <b style={{ color: '#e31837' }}>1</b></span>
+            <span onClick={() => setActiveModal('notifications')}>
+              Notifications <b style={{ color: '#e31837' }}>{isRestricted ? '3' : '2'}</b>
+            </span>
             <span onClick={() => changeView('profile')}>Profile & settings</span>
             <span onClick={() => triggerMockFeature('Help')}>Need help?</span>
             <span onClick={handleLogout}>Log out</span>
@@ -636,7 +722,7 @@ export default function ClientDashboard() {
           <div className="nav-container">
             <div className={`nav-tab ${currentView === 'dashboard' ? 'active' : ''}`} onClick={() => changeView('dashboard')}>Dashboard</div>
             <div className={`nav-tab ${currentView === 'transactions' ? 'active' : ''}`} onClick={() => changeView('transactions')}>Activity</div>
-            <div className="nav-tab" onClick={() => setActiveModal('transfer')}>Transfer & pay</div>
+            <div className="nav-tab" onClick={() => handleSecureAction(() => setActiveModal('transfer'))}>Transfer & pay</div>
             <div className={`nav-tab ${currentView === 'security' ? 'active' : ''}`} onClick={() => changeView('security')}>Security & limits</div>
             <div className="nav-tab" onClick={() => generatePDFStatement()}>Products & offers</div>
           </div>
@@ -646,18 +732,23 @@ export default function ClientDashboard() {
       {/* --- MOBILE HEADER --- */}
       <div className="mobile-header show-mobile">
         <div className="mobile-top-row">
-          <div className="mobile-search" style={{ margin: 0 }}>
+          <div className="mobile-search">
             <span>🔍</span>
             <input type="text" placeholder="Smart Assistant" />
             <span>🎤</span>
           </div>
+          {/* MODERN INTERACTIVE TOP-RIGHT CORNER BELL ICON */}
+          <button className="mobile-bell-btn" onClick={() => setActiveModal('notifications')}>
+            🔔
+            {isRestricted && <span className="mobile-bell-badge"></span>}
+          </button>
         </div>
         <div className="mobile-greeting">{username}.</div>
+        {/* REORDERED & RESTRICTED MOBILE PILLS */}
         <div className="mobile-pills">
-          <div className="pill" onClick={() => triggerMockFeature('Rewards')}>Rewards</div>
-          <div className="pill" onClick={() => triggerMockFeature('Deposit Check')}>Deposit check</div>
-          <div className="pill" onClick={() => setActiveModal('transfer')}>Send | Zelle®</div>
-          <div className="pill" onClick={() => generatePDFStatement()}>•••</div>
+          <div className="pill" onClick={() => handleSecureAction(() => setActiveModal('transfer'))}>Send | Zelle®</div>
+          <div className="pill" onClick={() => handleSecureAction(() => triggerMockFeature('Deposit Check'))}>Deposit check</div>
+          <div className="pill" onClick={() => handleSecureAction(() => triggerMockFeature('Rewards'))}>Rewards</div>
         </div>
       </div>
 
@@ -683,8 +774,8 @@ export default function ClientDashboard() {
         
         {currentView === 'dashboard' && (
           <div className="action-row show-desktop">
-            <button className="btn-blue-solid" onClick={() => setActiveModal('transfer')}>Zelle® ›</button>
-            <button className="btn-blue-solid" onClick={() => triggerMockFeature('Bill Pay')}>Pay bills ›</button>
+            <button className="btn-blue-solid" onClick={() => handleSecureAction(() => setActiveModal('transfer'))}>Zelle® ›</button>
+            <button className="btn-blue-solid" onClick={() => handleSecureAction(() => triggerMockFeature('Bill Pay'))}>Pay bills ›</button>
             <button className="btn-blue-outline" onClick={() => generatePDFStatement()}>View statements</button>
             <button className="btn-blue-outline" onClick={() => triggerMockFeature('More')}>•••</button>
           </div>
@@ -718,7 +809,7 @@ export default function ClientDashboard() {
                     </div>
                   </div>
                   <div style={{ width: '100%' }}>
-                    <button className="btn-blue-outline" style={{ width: '100%', maxWidth: '200px' }} onClick={(e) => { e.stopPropagation(); setTransferType('external'); setFromAccount('Main'); setActiveModal('transfer'); }}>Make a transfer ›</button>
+                    <button className="btn-blue-outline" style={{ width: '100%', maxWidth: '200px' }} onClick={(e) => { e.stopPropagation(); handleSecureAction(() => { setTransferType('external'); setFromAccount('Main'); setActiveModal('transfer'); }); }}>Make a transfer ›</button>
                   </div>
                 </div>
 
@@ -736,7 +827,7 @@ export default function ClientDashboard() {
                     </div>
                   </div>
                   <div style={{ width: '100%' }}>
-                    <button className="btn-blue-outline" style={{ width: '100%', maxWidth: '200px' }} onClick={(e) => { e.stopPropagation(); setTransferType('internal'); setFromAccount('Vault'); setToAccount('Main'); setActiveModal('transfer'); }}>Make a transfer ›</button>
+                    <button className="btn-blue-outline" style={{ width: '100%', maxWidth: '200px' }} onClick={(e) => { e.stopPropagation(); handleSecureAction(() => { setTransferType('internal'); setFromAccount('Vault'); setToAccount('Main'); setActiveModal('transfer'); }); }}>Make a transfer ›</button>
                   </div>
                 </div>
 
@@ -785,7 +876,8 @@ export default function ClientDashboard() {
               <button className={`f-pill ${txFilter === 'pending' ? 'active' : ''}`} onClick={() => { simulateNetworkLatency(() => setTxFilter('pending')); }}>Pending</button>
             </div>
 
-            <div className="table-wrapper">
+            {/* DESKTOP TABLE VIEW */}
+            <div className="table-wrapper show-desktop">
               <table className="tx-table">
                 <thead>
                   <tr>
@@ -808,7 +900,7 @@ export default function ClientDashboard() {
                           {t.status === 'approved' ? 'Completed' : t.status}
                         </span>
                       </td>
-                      <td style={{ textAlign: 'right', fontWeight: '600', color: t.type === 'Credit' ? '#166534' : '#1f2937', whiteSpace: 'nowrap' }}>
+                      <td style={{ textAlign: 'right', fontWeight: '600', color: t.type === 'Credit' ? '#166534' : '#e31837', whiteSpace: 'nowrap' }}>
                         {t.type === 'Credit' ? '+' : '-'}${Number(t.amount).toLocaleString('en-US', {minimumFractionDigits: 2})}
                       </td>
                     </tr>
@@ -816,6 +908,30 @@ export default function ClientDashboard() {
                 </tbody>
               </table>
             </div>
+
+            {/* MOBILE COMPACT LIST VIEW */}
+            <div className="show-mobile">
+              <div className="mobile-tx-list">
+                {filteredTransactions.length === 0 && (<div style={{ textAlign: 'center', padding: '32px', color: '#6b7280' }}>No transactions found.</div>)}
+                {filteredTransactions.map((t) => (
+                  <div className="m-tx-card" key={t.id}>
+                    <div className="m-tx-row">
+                      <div className="m-tx-desc">{t.desc}</div>
+                      <div className="m-tx-amount" style={{ color: t.type === 'Credit' ? '#166534' : '#e31837' }}>
+                        {t.type === 'Credit' ? '+' : '-'}${Number(t.amount).toLocaleString('en-US', {minimumFractionDigits: 2})}
+                      </div>
+                    </div>
+                    <div className="m-tx-row">
+                      <div className="m-tx-date">{t.date} • ...{t.account === 'Vault' ? '1195' : '8842'}</div>
+                      <div className="status-badge" style={{ color: t.status === 'approved' ? '#166534' : '#b45309', backgroundColor: t.status === 'approved' ? '#dcfce7' : '#fef3c7' }}>
+                        {t.status === 'approved' ? 'Completed' : t.status}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
           </div>
         )}
 
@@ -948,7 +1064,7 @@ export default function ClientDashboard() {
           <span className="b-nav-icon">⇄</span>
           <span>Ledger</span>
         </div>
-        <div className="b-nav-item" onClick={() => setActiveModal('transfer')}>
+        <div className="b-nav-item" onClick={() => handleSecureAction(() => setActiveModal('transfer'))}>
           <span className="b-nav-icon" style={{ fontSize: '28px', color: 'var(--brand-red)', marginTop: '-8px' }}>⊕</span>
           <span>Transfer</span>
         </div>
