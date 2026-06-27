@@ -5,7 +5,6 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable'; 
 import { supabase } from '../../lib/supabaseClient';
 
-// Updated BrandLogo to accept dynamic colors for mobile vs desktop
 const BrandLogo = ({ size = 36, textColor = "#001e79" }) => (
   <svg xmlns="http://www.w3.org/2000/svg" height={size} viewBox="0 0 1551 431">
     <g fill={textColor}>
@@ -322,8 +321,19 @@ export default function ClientDashboard() {
   const generatePDFStatement = () => {
     const doc = new jsPDF();
     doc.text("Global Vault - Official Statement", 14, 22);
-    const tableRows = transactions.map(t => [t.date, t.desc, t.account || 'Main', t.status.toUpperCase(), `${t.type === 'Credit' ? '+' : '-'}$${Number(t.amount).toLocaleString()}`]);
-    autoTable(doc, { startY: 30, head: [["Date", "Description", "Account", "Status", "Amount"]], body: tableRows, theme: 'grid' });
+    const tableRows = transactions.map(t => [
+      t.date, 
+      t.desc, 
+      t.account === 'Vault' ? 'Savings ...1195' : 'Checking ...8842', 
+      t.status.toUpperCase(), 
+      `${t.type === 'Credit' ? '+' : '-'}$${Number(t.amount).toLocaleString('en-US', {minimumFractionDigits: 2})}`
+    ]);
+    autoTable(doc, { 
+      startY: 30, 
+      head: [["Date", "Description", "Account", "Status", "Amount"]], 
+      body: tableRows, 
+      theme: 'grid' 
+    });
     doc.save(`Activity_Statement.pdf`);
   };
 
@@ -409,21 +419,18 @@ export default function ClientDashboard() {
 
     /* Mobile Header */
     .mobile-header { display: none; background: var(--hero-blue); color: white; padding: 20px 20px 0 20px; width: 100%; }
-    /* Fix: Add top padding/margin to nudge mobile logo down slightly */
     .mobile-top-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; width: 100%; gap: 16px; padding-top: 8px; }
-    .mobile-search { background: rgba(255,255,255,0.2); border-radius: 20px; padding: 8px 16px; display: flex; align-items: center; margin-bottom: 24px; width: 100%; }
+    .mobile-search { background: rgba(255,255,255,0.2); border-radius: 20px; padding: 6px 12px; display: flex; align-items: center; margin-bottom: 20px; width: 100%; }
     .mobile-search input { background: transparent; border: none; color: white; width: 100%; outline: none; margin: 0 8px; }
     .mobile-search input::placeholder { color: rgba(255,255,255,0.8); }
     
     /* Modern Header Bell Style */
     .mobile-bell-btn { background: none; border: none; color: white; font-size: 22px; cursor: pointer; padding: 4px; position: relative; display: flex; align-items: center; justify-content: center; }
     .mobile-bell-badge { position: absolute; top: 2px; right: 2px; width: 8px; height: 8px; background-color: var(--brand-red); border-radius: 50%; border: 1px solid var(--hero-blue); }
-
-    .mobile-greeting { font-size: 24px; font-weight: 700; margin-bottom: 16px; letter-spacing: -0.5px; word-break: break-word; }
     
     .mobile-pills { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 20px; scrollbar-width: none; -ms-overflow-style: none; }
     .mobile-pills::-webkit-scrollbar { display: none; }
-    .pill { background: white; color: var(--hero-blue); padding: 8px 16px; border-radius: 20px; font-size: 13px; font-weight: 600; white-space: nowrap; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+    .pill { background: white; color: var(--hero-blue); padding: 6px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; white-space: nowrap; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
 
     /* Desktop Hero */
     .desktop-hero-container { max-width: 1400px; margin: 0 auto; padding: 16px 40px 0 40px; width: 100%; }
@@ -504,9 +511,9 @@ export default function ClientDashboard() {
     .m-tx-card { border-bottom: 1px solid var(--border-light); padding: 16px 0; display: flex; flex-direction: column; gap: 8px; }
     .m-tx-card:last-child { border-bottom: none; }
     .m-tx-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
-    .m-tx-desc { font-weight: 600; color: var(--text-main); font-size: 15px; line-height: 1.3; word-break: break-word; }
-    .m-tx-amount { font-weight: 700; font-size: 16px; white-space: nowrap; flex-shrink: 0; }
-    .m-tx-date { font-size: 13px; color: var(--text-muted); }
+    .m-tx-desc { font-weight: 600; color: var(--text-main); font-size: 14px; line-height: 1.3; word-break: break-word; }
+    .m-tx-amount { font-weight: 700; font-size: 15px; white-space: nowrap; flex-shrink: 0; }
+    .m-tx-date { font-size: 12px; color: var(--text-muted); }
 
     /* Forms */
     .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
@@ -530,10 +537,10 @@ export default function ClientDashboard() {
     .toast { position: fixed; bottom: 100px; left: 50%; transform: translateX(-50%); background: #1f2937; color: white; padding: 16px 24px; border-radius: 8px; font-weight: 500; font-size: 14px; z-index: 9999; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.2); white-space: nowrap; max-width: 90vw; }
 
     /* Mobile Bottom Nav Restructured */
-    .bottom-nav { display: none; position: fixed; bottom: 0; left: 0; width: 100%; background: #f8fafc; border-top: 1px solid var(--border-light); z-index: 100; justify-content: space-between; padding: 12px 16px 24px 16px; box-shadow: 0 -4px 6px -1px rgba(0,0,0,0.05); }
-    .b-nav-item { display: flex; flex-direction: column; align-items: center; gap: 6px; color: #64748b; font-size: 11px; font-weight: 600; cursor: pointer; flex: 1; text-align: center; }
+    .bottom-nav { display: none; position: fixed; bottom: 0; left: 0; width: 100%; background: #f8fafc; border-top: 1px solid var(--border-light); z-index: 100; justify-content: space-between; padding: 10px 16px 16px 16px; box-shadow: 0 -4px 6px -1px rgba(0,0,0,0.05); }
+    .b-nav-item { display: flex; flex-direction: column; align-items: center; gap: 4px; color: #64748b; font-size: 10px; font-weight: 600; cursor: pointer; flex: 1; text-align: center; }
     .b-nav-item.active { color: var(--hero-blue); }
-    .b-nav-icon { font-size: 22px; font-weight: normal; }
+    .b-nav-icon { font-size: 20px; font-weight: normal; }
 
     /* --- RESPONSIVE BREAKPOINTS --- */
     .show-desktop { display: block; }
@@ -560,13 +567,18 @@ export default function ClientDashboard() {
       .mobile-header, .bottom-nav { display: flex; }
       .mobile-header { flex-direction: column; }
       
-      .main-container { padding: 16px 16px 100px 16px; }
+      .main-container { padding: 16px 16px 80px 16px; }
       .us-card { padding: 16px; }
       
       .acc-right { width: 100%; margin-top: 8px; }
-      .acc-balance { font-size: 28px; }
+      .acc-balance { font-size: 22px; }
+      .acc-name { font-size: 15px; }
+      .acc-number { font-size: 14px; }
+      .card-title { font-size: 18px; }
       
-      .toast { bottom: 100px; white-space: normal; text-align: center; }
+      .mobile-greeting { font-size: 20px; margin-bottom: 12px; }
+      
+      .toast { bottom: 80px; white-space: normal; text-align: center; }
     }
   `;
 
@@ -908,7 +920,7 @@ export default function ClientDashboard() {
       <div className="main-container">
         
         {currentView === 'dashboard' && (
-          <div className="action-row show-desktop">
+          <div className="action-row show-desktop" style={{ gap: '12px' }}>
             <button className="btn-blue-solid" onClick={() => handleSecureAction(() => setActiveModal('transfer'))}>Zelle® ›</button>
             <button className="btn-blue-solid" onClick={() => handleSecureAction(() => triggerMockFeature('Bill Pay'))}>Pay bills ›</button>
             <button className="btn-blue-outline" onClick={() => generatePDFStatement()}>View statements</button>
